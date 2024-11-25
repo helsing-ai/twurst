@@ -1,9 +1,24 @@
 [workspace]
-members = ["error"]
+members = ["client", "error"]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 version = "0.0.0"
 license = "Apache-2.0"
-rust-version = "1.75"
+rust-version = "1.79"
+
+[workspace.dependencies]
+axum-07 = { package = "axum", version = "0.7", default-features = false }
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+prost = "0.13"
+prost-reflect = "0.14"
+reqwest-012 = { package = "reqwest", version = "0.12", default-features = false }
+serde = "1.0.132"
+serde_json = "1"
+tokio = "1.13"
+tower-service = "0.3.1"
+tower = "0.5"
+trait-variant = "0.1.2"
