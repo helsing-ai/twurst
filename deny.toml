@@ -1,0 +1,8 @@
+[licenses]
+allow = [
+    "Apache-2.0",
+    "MIT",
+]
+
+[sources]
+unknown-registry = "deny"

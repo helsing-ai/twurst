@@ -1,8 +1,9 @@
 [workspace]
-members = []
+members = ["error"]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 version = "0.0.0"
 license = "Apache-2.0"
+rust-version = "1.75"
