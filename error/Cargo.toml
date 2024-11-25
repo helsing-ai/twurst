@@ -1,0 +1,6 @@
+[package]
+name = "twurst-error"
+description = "Twirp error struct"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
