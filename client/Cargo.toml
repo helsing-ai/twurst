@@ -1,0 +1,26 @@
+[package]
+name = "twurst-client"
+description = "Twirp client related code"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+reqwest-012 = ["dep:reqwest-012"]
+
+[dependencies]
+http.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+twurst-error = { path = "../error", features = ["http"] }
+prost-reflect = { workspace = true, features = ["derive", "serde"] }
+reqwest-012 = { workspace = true, optional = true }
+serde_json.workspace = true
+serde.workspace = true
+tower-service.workspace = true
+trait-variant.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower = { workspace = true, features = ["util"] }

@@ -22,13 +22,19 @@ use std::sync::Arc;
 /// assert_eq!(error.meta("id"), Some("foo"));
 /// ```
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TwirpError {
     /// The [error code](https://twitchtv.github.io/twirp/docs/spec_v7.html#error-codes)
     code: TwirpErrorCode,
     /// The error message (human description of the error)
     msg: String,
     /// Some metadata describing the error
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "HashMap::is_empty")
+    )]
     meta: HashMap<String, String>,
+    #[cfg_attr(feature = "serde", serde(default, skip))]
     source: Option<Arc<dyn Error + Send + Sync>>,
 }
 
@@ -202,6 +208,8 @@ impl Eq for TwirpError {}
 
 /// A Twirp [error code](https://twitchtv.github.io/twirp/docs/spec_v7.html#error-codes)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum TwirpErrorCode {
     /// The operation was cancelled.
     Canceled,
@@ -239,4 +247,157 @@ pub enum TwirpErrorCode {
     Unavailable,
     /// The operation resulted in unrecoverable data loss or corruption.
     Dataloss,
+}
+
+/// Applies the mapping defined in [Twirp spec](https://twitchtv.github.io/twirp/docs/spec_v7.html#error-codes)
+#[cfg(feature = "http")]
+impl From<TwirpErrorCode> for http::StatusCode {
+    #[inline]
+    fn from(code: TwirpErrorCode) -> Self {
+        match code {
+            TwirpErrorCode::Canceled => Self::REQUEST_TIMEOUT,
+            TwirpErrorCode::Unknown => Self::INTERNAL_SERVER_ERROR,
+            TwirpErrorCode::InvalidArgument => Self::BAD_REQUEST,
+            TwirpErrorCode::Malformed => Self::BAD_REQUEST,
+            TwirpErrorCode::DeadlineExceeded => Self::REQUEST_TIMEOUT,
+            TwirpErrorCode::NotFound => Self::NOT_FOUND,
+            TwirpErrorCode::BadRoute => Self::NOT_FOUND,
+            TwirpErrorCode::AlreadyExists => Self::CONFLICT,
+            TwirpErrorCode::PermissionDenied => Self::FORBIDDEN,
+            TwirpErrorCode::Unauthenticated => Self::UNAUTHORIZED,
+            TwirpErrorCode::ResourceExhausted => Self::TOO_MANY_REQUESTS,
+            TwirpErrorCode::FailedPrecondition => Self::PRECONDITION_FAILED,
+            TwirpErrorCode::Aborted => Self::CONFLICT,
+            TwirpErrorCode::OutOfRange => Self::BAD_REQUEST,
+            TwirpErrorCode::Unimplemented => Self::NOT_IMPLEMENTED,
+            TwirpErrorCode::Internal => Self::INTERNAL_SERVER_ERROR,
+            TwirpErrorCode::Unavailable => Self::SERVICE_UNAVAILABLE,
+            TwirpErrorCode::Dataloss => Self::SERVICE_UNAVAILABLE,
+        }
+    }
+}
+
+#[cfg(feature = "http")]
+impl<B: From<String>> From<TwirpError> for http::Response<B> {
+    fn from(error: TwirpError) -> Self {
+        let json = serde_json::to_string(&error).unwrap();
+        http::Response::builder()
+            .status(error.code)
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .extension(error)
+            .body(json.into())
+            .unwrap()
+    }
+}
+
+#[cfg(feature = "http")]
+impl<B: AsRef<[u8]>> From<http::Response<B>> for TwirpError {
+    fn from(response: http::Response<B>) -> Self {
+        if let Some(error) = response.extensions().get::<Self>() {
+            // We got a ready to use error in the extensions, let's use it
+            return error.clone();
+        }
+        // We are lenient here, a bad error is better than no error at all
+        let status = response.status();
+        let body = response.into_body();
+        if let Ok(error) = serde_json::from_slice::<TwirpError>(body.as_ref()) {
+            // The body is an error, we use it
+            return error;
+        }
+        // We don't have a Twirp error, we build a fallback
+        let code = if status == http::StatusCode::REQUEST_TIMEOUT {
+            TwirpErrorCode::DeadlineExceeded
+        } else if status == http::StatusCode::FORBIDDEN {
+            TwirpErrorCode::PermissionDenied
+        } else if status == http::StatusCode::UNAUTHORIZED {
+            TwirpErrorCode::Unauthenticated
+        } else if status == http::StatusCode::TOO_MANY_REQUESTS {
+            TwirpErrorCode::ResourceExhausted
+        } else if status == http::StatusCode::PRECONDITION_FAILED {
+            TwirpErrorCode::FailedPrecondition
+        } else if status == http::StatusCode::NOT_IMPLEMENTED {
+            TwirpErrorCode::Unimplemented
+        } else if status == http::StatusCode::TOO_MANY_REQUESTS
+            || status == http::StatusCode::BAD_GATEWAY
+            || status == http::StatusCode::SERVICE_UNAVAILABLE
+            || status == http::StatusCode::GATEWAY_TIMEOUT
+        {
+            TwirpErrorCode::Unavailable
+        } else if status == http::StatusCode::NOT_FOUND {
+            TwirpErrorCode::NotFound
+        } else if status.is_server_error() {
+            TwirpErrorCode::Internal
+        } else if status.is_client_error() {
+            TwirpErrorCode::Malformed
+        } else {
+            TwirpErrorCode::Unknown
+        };
+        TwirpError::new(code, String::from_utf8_lossy(body.as_ref()))
+    }
+}
+
+#[cfg(feature = "axum-07")]
+impl axum_07::response::IntoResponse for TwirpError {
+    #[inline]
+    fn into_response(self) -> axum_07::response::Response {
+        self.into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(feature = "http")]
+    use std::error::Error;
+
+    #[test]
+    fn test_accessors() {
+        let error = TwirpError::invalid_argument("foo", "foo is wrong");
+        assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
+        assert_eq!(error.message(), "foo is wrong");
+        assert_eq!(error.meta("argument"), Some("foo"));
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn test_to_response() -> Result<(), Box<dyn Error>> {
+        let object =
+            TwirpError::permission_denied("Thou shall not pass").with_meta("target", "Balrog");
+        let response = http::Response::<Vec<u8>>::from(object);
+        assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
+        assert_eq!(
+            response.headers().get(http::header::CONTENT_TYPE),
+            Some(&http::HeaderValue::from_static("application/json"))
+        );
+        assert_eq!(
+            response.into_body(), b"{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":\"Balrog\"}}"
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn test_from_valid_response() -> Result<(), Box<dyn Error>> {
+        let response = http::Response::builder()
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body("{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":\"Balrog\"}}")?;
+        assert_eq!(
+            TwirpError::from(response),
+            TwirpError::permission_denied("Thou shall not pass").with_meta("target", "Balrog")
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn test_from_plain_response() -> Result<(), Box<dyn Error>> {
+        let response = http::Response::builder()
+            .status(http::StatusCode::FORBIDDEN)
+            .body("Thou shall not pass")?;
+        assert_eq!(
+            TwirpError::from(response),
+            TwirpError::permission_denied("Thou shall not pass")
+        );
+        Ok(())
+    }
 }

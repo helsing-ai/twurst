@@ -25,6 +25,10 @@ jobs:
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: error
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: client
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
       - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
 
   test:
@@ -33,13 +37,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
+        working-directory: error
+      - run: cargo test
+        working-directory: client
+      - run: cargo test
       - run: cargo test --all-features
 
   test_msv:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: rustup override set 1.75.0 && rustup toolchain install nightly
+      - run: rustup override set 1.79.0 && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly update -Z direct-minimal-versions
       - run: cargo test

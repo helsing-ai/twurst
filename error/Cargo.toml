@@ -4,3 +4,15 @@ description = "Twirp error struct"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+rust-version.workspace = true
+
+[features]
+axum-07 = ["dep:axum-07", "http"]
+http = ["dep:http", "dep:serde_json", "serde"]
+serde = ["dep:serde"]
+
+[dependencies]
+axum-07 = { workspace = true, optional = true }
+http = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
