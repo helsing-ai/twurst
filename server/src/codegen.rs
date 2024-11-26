@@ -1,17 +1,17 @@
 use crate::TwirpError;
-use axum_07::body::Body;
-pub use axum_07::extract::FromRequestParts;
-use axum_07::extract::{Request, State};
-use axum_07::http::header::CONTENT_TYPE;
-pub use axum_07::http::request::Parts as RequestParts;
+use axum::body::Body;
+pub use axum::extract::FromRequestParts;
+use axum::extract::{Request, State};
+use axum::http::header::CONTENT_TYPE;
+pub use axum::http::request::Parts as RequestParts;
 #[cfg(feature = "grpc")]
-use axum_07::http::Method;
-use axum_07::http::{HeaderMap, HeaderValue, Uri};
-pub use axum_07::response::IntoResponse;
-use axum_07::response::Response;
-use axum_07::routing::post;
-use axum_07::RequestExt;
-pub use axum_07::Router;
+use axum::http::Method;
+use axum::http::{HeaderMap, HeaderValue, Uri};
+pub use axum::response::IntoResponse;
+use axum::response::Response;
+use axum::routing::post;
+use axum::RequestExt;
+pub use axum::Router;
 use http_body_util::BodyExt;
 use prost_reflect::bytes::{Bytes, BytesMut};
 use prost_reflect::{DynamicMessage, ReflectMessage};
@@ -338,8 +338,8 @@ pub async fn twirp_error_from_response(response: impl IntoResponse) -> TwirpErro
 mod tests {
     use super::*;
     #[cfg(feature = "grpc")]
-    use axum_07::http::uri::PathAndQuery;
-    use axum_07::http::{Method, Request, StatusCode};
+    use axum::http::uri::PathAndQuery;
+    use axum::http::{Method, Request, StatusCode};
     use http_body_util::BodyExt;
     use prost::Message;
     #[cfg(feature = "grpc")]

@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package integration;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+service IntegrationService {
+  rpc Test(TestRequest) returns (TestResponse) {}
+}
+
+message TestNested {
+  enum TestEnum {
+    TEST_ENUM_UNKNOWN = 0;
+    X = 1;
+    Y = 2;
+  }
+  message NestedMessage {
+    TestEnum enum = 1;
+  }
+  NestedMessage field0 = 1;
+}
+
+message TestRequest {
+  string string = 1;
+  google.protobuf.Timestamp time = 2;
+  TestNested nested = 3;
+  oneof option {
+    uint64 left = 4;
+    double right = 5;
+  }
+  google.protobuf.Duration duration = 6;
+  google.protobuf.Any any = 7;
+  google.protobuf.Value value = 8;
+}
+
+message TestResponse {
+  string string = 1;
+  google.protobuf.Timestamp time = 2;
+  TestNested nested = 3;
+  oneof option {
+    uint64 left = 4;
+    double right = 5;
+  }
+  google.protobuf.Duration duration = 6;
+  google.protobuf.Any any = 7;
+  google.protobuf.Value value = 8;
+}
+
+message Int {
+  uint64 value = 1;
+}
