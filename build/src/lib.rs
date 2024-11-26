@@ -1,0 +1,397 @@
+#![doc = include_str!("../README.md")]
+#![doc(test(attr(deny(warnings))))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
+pub use prost_build as prost;
+use prost_build::{Config, Module, Service, ServiceGenerator};
+use regex::Regex;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
+use std::io::{Error, Result};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
+
+/// Builds protobuf bindings for Twirp.
+///
+/// Client and server are not enabled by defaults and must be enabled with the [`with_client`](Self::with_client) and [`with_server`](Self::with_server) methods.
+#[derive(Default)]
+pub struct TwirpBuilder {
+    config: Config,
+    generator: TwirpServiceGenerator,
+    type_name_domain: Option<String>,
+}
+
+impl TwirpBuilder {
+    /// Builder with the default prost [`Config`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Builder with a custom prost [`Config`].
+    pub fn from_prost(config: Config) -> Self {
+        Self {
+            config,
+            generator: TwirpServiceGenerator::new(),
+            type_name_domain: None,
+        }
+    }
+
+    /// Generates code for the Twirp client.
+    pub fn with_client(mut self) -> Self {
+        self.generator = self.generator.with_client();
+        self
+    }
+
+    /// Generates code for the Twirp server.
+    pub fn with_server(mut self) -> Self {
+        self.generator = self.generator.with_server();
+        self
+    }
+
+    /// Adds an extra parameter to generated server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
+    ///
+    /// For example
+    /// ```proto
+    /// message Service {
+    ///     rpc Test(TestRequest) returns (TestResponse) {}
+    /// }
+    /// ```
+    /// Compiled with option `.with_axum_request_extractor("headers", "::axum::http::HeaderMap")`
+    /// will generate the following code allowing to extract the request headers:
+    /// ```ignore
+    /// trait Service {
+    ///     async fn test(request: TestRequest, headers: ::axum::http::HeaderMap) -> Result<TestResponse, TwirpError>;
+    /// }
+    /// ```
+    ///
+    /// Note that the parameter type must implement [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
+    pub fn with_axum_request_extractor(
+        mut self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+    ) -> Self {
+        self.generator = self.generator.with_axum_request_extractor(name, type_name);
+        self
+    }
+
+    /// Customizes the type name domain.
+    ///
+    /// By default, 'type.googleapis.com' is used.
+    pub fn with_type_name_domain(mut self, domain: impl Into<String>) -> Self {
+        self.type_name_domain = Some(domain.into());
+        self
+    }
+
+    /// Do compile the protos.
+    pub fn compile_protos(
+        mut self,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> Result<()> {
+        let out_dir = PathBuf::from(
+            env::var_os("OUT_DIR").ok_or_else(|| Error::other("OUT_DIR is not set"))?,
+        );
+
+        // We make sure the script is executed again if a file changed
+        for proto in protos {
+            println!("cargo:rerun-if-changed={}", proto.as_ref().display());
+        }
+        self.config
+            .enable_type_names()
+            .type_name_domain(
+                ["."],
+                self.type_name_domain
+                    .as_deref()
+                    .unwrap_or("type.googleapis.com"),
+            )
+            .service_generator(Box::new(self.generator));
+
+        // We configure with prost reflect
+        prost_reflect_build::Builder::new()
+            .file_descriptor_set_bytes("self::FILE_DESCRIPTOR_SET_BYTES")
+            .configure(&mut self.config, protos, includes)?;
+
+        // We do the build itself while saving the list of modules
+        let config = self.config.skip_protoc_run();
+        let file_descriptor_set = config.load_fds(protos, includes)?;
+        let modules = file_descriptor_set
+            .file
+            .iter()
+            .map(|fd| Module::from_protobuf_package_name(fd.package()))
+            .collect::<HashSet<_>>();
+
+        // We check there is no streaming
+        for file_descriptor in &file_descriptor_set.file {
+            for service in &file_descriptor.service {
+                for method in &service.method {
+                    if method.client_streaming() {
+                        return Err(Error::other(format!(
+                            "Client streaming is not supported in method {} of service {} in file {}",
+                            method.name(), service.name(), file_descriptor.name()
+                        )));
+                    }
+                    if method.server_streaming() {
+                        return Err(Error::other(format!(
+                            "Server streaming is not supported in method {} of service {} in file {}",
+                            method.name(), service.name(), file_descriptor.name()
+                        )));
+                    }
+                }
+            }
+        }
+
+        // We generate the files
+        config.compile_fds(file_descriptor_set)?;
+
+        // TODO(vsiles) consider proper AST parsing in case we need to do something
+        // more robust
+        //
+        // prepare a regex to match `pub mod <module-name> {`
+        let re = Regex::new(r"^(\s*)pub mod \w+ \{\s*$").expect("Failed to compile regex");
+
+        // We add the file descriptor to every file to make reflection work automatically
+        for module in modules {
+            let file_path = Path::new(&out_dir).join(module.to_file_name_or("_"));
+            if !file_path.exists() {
+                continue; // We ignore not built files
+            }
+            let original_content = fs::read_to_string(&file_path)?;
+
+            // scan for nested modules and insert the right FILE_DESCRIPTOR_SET_BYTES definition
+            let mut modified_content = original_content
+                .lines()
+                .flat_map(|line| {
+                    if let Some(captures) = re.captures(line) {
+                        let indentation = captures.get(1).map_or("", |m| m.as_str());
+                        vec![
+                            line.to_string(),
+                            // if there is no nested type, the next line would generate a warning
+                            format!("    {}{}", indentation, "#[allow(unused_imports)]"),
+                            format!(
+                                "    {}{}",
+                                indentation, "use super::FILE_DESCRIPTOR_SET_BYTES;"
+                            ),
+                        ]
+                    } else {
+                        vec![line.to_string()]
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            modified_content.push("const FILE_DESCRIPTOR_SET_BYTES: &[u8] = include_bytes!(\"file_descriptor_set.bin\");\n".to_string());
+            let file_content = modified_content.join("\n");
+
+            fs::write(&file_path, &file_content)?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Low level generator for Twirp related code.
+///
+/// This only useful if you want to customize builds. For common use cases, please use [`TwirpBuilder`].
+///
+/// Should be given to [`Config::service_generator`].
+///
+/// Client and server are not enabled by defaults and must be enabled with the [`with_client`](Self::with_client) and [`with_server`](Self::with_server) methods.
+#[derive(Default)]
+struct TwirpServiceGenerator {
+    client: bool,
+    server: bool,
+    request_extractors: HashMap<String, String>,
+}
+
+impl TwirpServiceGenerator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_client(mut self) -> Self {
+        self.client = true;
+        self
+    }
+
+    pub fn with_server(mut self) -> Self {
+        self.server = true;
+        self
+    }
+
+    pub fn with_axum_request_extractor(
+        mut self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+    ) -> Self {
+        self.request_extractors
+            .insert(name.into(), type_name.into());
+        self
+    }
+}
+
+impl ServiceGenerator for TwirpServiceGenerator {
+    fn generate(&mut self, service: Service, buf: &mut String) {
+        self.do_generate(service, buf)
+            .expect("failed to generate Twirp service")
+    }
+}
+
+impl TwirpServiceGenerator {
+    fn do_generate(&mut self, service: Service, buf: &mut String) -> std::fmt::Result {
+        if self.client {
+            writeln!(buf)?;
+            for comment in &service.comments.leading {
+                writeln!(buf, "/// {comment}")?;
+            }
+            if service.options.deprecated.unwrap_or(false) {
+                writeln!(buf, "#[deprecated]")?;
+            }
+            writeln!(buf, "#[derive(Clone)]")?;
+            writeln!(
+                buf,
+                "pub struct {}Client<C: ::twurst_client::TwirpHttpService> {{",
+                service.name
+            )?;
+            writeln!(buf, "    client: ::twurst_client::TwirpHttpClient<C>")?;
+            writeln!(buf, "}}")?;
+            writeln!(buf)?;
+            writeln!(
+                buf,
+                "impl<C: ::twurst_client::TwirpHttpService> {}Client<C> {{",
+                service.name
+            )?;
+            writeln!(
+                buf,
+                "    pub fn new(client: impl Into<::twurst_client::TwirpHttpClient<C>>) -> Self {{"
+            )?;
+            writeln!(buf, "        Self {{ client: client.into() }}")?;
+            writeln!(buf, "    }}")?;
+            for method in &service.methods {
+                for comment in &method.comments.leading {
+                    writeln!(buf, "    /// {comment}")?;
+                }
+                if method.options.deprecated.unwrap_or(false) {
+                    writeln!(buf, "#[deprecated]")?;
+                }
+                writeln!(
+                    buf,
+                    "    pub async fn {}(&self, request: &{}) -> Result<{}, ::twurst_client::TwirpError> {{",
+                    method.name, method.input_type, method.output_type,
+                )?;
+                writeln!(
+                    buf,
+                    "        self.client.call(\"/{}.{}/{}\", request).await",
+                    service.package, service.proto_name, method.proto_name,
+                )?;
+                writeln!(buf, "    }}")?;
+            }
+            writeln!(buf, "}}")?;
+        }
+
+        if self.server {
+            writeln!(buf)?;
+            for comment in &service.comments.leading {
+                writeln!(buf, "/// {comment}")?;
+            }
+            writeln!(buf, "#[::twurst_server::codegen::trait_variant_make(Send)]")?;
+            writeln!(buf, "pub trait {} {{", service.name)?;
+            for method in &service.methods {
+                for comment in &method.comments.leading {
+                    writeln!(buf, "    /// {comment}")?;
+                }
+                write!(
+                    buf,
+                    "    async fn {}(&self, request: {}",
+                    method.name, method.input_type
+                )?;
+                for (arg_name, arg_type) in &self.request_extractors {
+                    write!(buf, ", {arg_name}: {arg_type}")?;
+                }
+                writeln!(
+                    buf,
+                    ") -> Result<{}, ::twurst_server::TwirpError>;",
+                    method.output_type
+                )?;
+            }
+            writeln!(buf)?;
+            writeln!(
+                buf,
+                "    fn into_router<S: Clone + Send + Sync + 'static>(self) -> ::twurst_server::codegen::Router<S> where Self : Sized + Send + Sync + 'static {{"
+            )?;
+            writeln!(
+                buf,
+                "        ::twurst_server::codegen::TwirpRouter::new(::std::sync::Arc::new(self))"
+            )?;
+            for method in &service.methods {
+                write!(
+                    buf,
+                    "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
+                    service.package, service.proto_name, method.proto_name, method.input_type,
+                )?;
+                if self.request_extractors.is_empty() {
+                    write!(buf, ", _: ::twurst_server::codegen::RequestParts, _: S")?;
+                } else {
+                    write!(
+                        buf,
+                        ", mut parts: ::twurst_server::codegen::RequestParts, state: S",
+                    )?;
+                }
+                write!(buf, "| {{")?;
+                writeln!(buf, "                async move {{")?;
+                write!(buf, "                    service.{}(request", method.name)?;
+                for _ in self.request_extractors.values() {
+                    write!(
+                        buf,
+                        ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
+                    )?;
+                }
+                writeln!(buf, ").await")?;
+                writeln!(buf, "                }}")?;
+                writeln!(buf, "            }})")?;
+            }
+            writeln!(buf, "            .build()")?;
+            writeln!(buf, "    }}")?;
+
+            if cfg!(feature = "grpc") {
+                writeln!(buf)?;
+                writeln!(
+                    buf,
+                    "    fn into_grpc_router(self) -> ::twurst_server::codegen::Router where Self : Sized + Send + Sync + 'static {{"
+                )?;
+                writeln!(
+                    buf,
+                    "        ::twurst_server::codegen::GrpcRouter::new(::std::sync::Arc::new(self))"
+                )?;
+                for method in &service.methods {
+                    write!(
+                        buf,
+                        "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
+                        service.package, service.proto_name, method.proto_name, method.input_type,
+                    )?;
+                    if self.request_extractors.is_empty() {
+                        write!(buf, ", _: ::twurst_server::codegen::RequestParts")?;
+                    } else {
+                        write!(buf, ", mut parts: ::twurst_server::codegen::RequestParts")?;
+                    }
+                    write!(buf, "| {{")?;
+                    writeln!(buf, "                async move {{")?;
+                    write!(buf, "                    service.{}(request", method.name)?;
+                    for _ in self.request_extractors.values() {
+                        write!(
+                            buf,
+                            ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
+                        )?;
+                    }
+                    writeln!(buf, ").await")?;
+                    writeln!(buf, "                }}")?;
+                    writeln!(buf, "            }})")?;
+                }
+                writeln!(buf, "            .build()")?;
+                writeln!(buf, "    }}")?;
+            }
+
+            writeln!(buf, "}}")?;
+        }
+
+        Ok(())
+    }
+}

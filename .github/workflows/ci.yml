@@ -31,6 +31,8 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: server
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: build
+      - run: cargo clippy --all-targets -- -D warnings -D clippy::all
       - run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all
 
   test:
@@ -44,6 +46,8 @@ jobs:
         working-directory: client
       - run: cargo test
         working-directory: server
+      - run: cargo test
+        working-directory: build
       - run: cargo test
       - run: cargo test --all-features
 
