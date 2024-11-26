@@ -1,6 +1,6 @@
 [package]
-name = "twurst-client"
-description = "Twirp client related code"
+name = "twurst-server"
+description = "Twirp server related code"
 authors.workspace = true
 edition.workspace = true
 version.workspace = true
@@ -8,20 +8,20 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-reqwest-012 = ["dep:reqwest-012"]
+grpc = ["dep:tonic"]
 
 [dependencies]
-http.workspace = true
-http-body.workspace = true
+twurst-error = { workspace = true, features = ["axum-07"] }
+axum-07.workspace = true
 http-body-util.workspace = true
-twurst-error = { workspace = true, features = ["http"] }
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
-reqwest-012 = { workspace = true, optional = true }
-serde_json.workspace = true
 serde.workspace = true
-tower-service.workspace = true
+serde_json.workspace = true
+tonic = { workspace = true, optional = true, features = ["transport", "prost"] }
+tracing.workspace = true
 trait-variant.workspace = true
 
 [dev-dependencies]
+prost.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
-tower = { workspace = true, features = ["util"] }
+tower-service.workspace = true
