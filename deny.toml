@@ -1,6 +1,17 @@
+[graph]
+all-features = true
+
+[bans]
+deny = [
+    { crate = "openssl-sys", reason = "TLS implementations should be optional and not mandatory" },
+    { crate = "rustls", reason = "TLS implementations should be optional and not mandatory" },
+]
+wildcards = "deny"
+
 [licenses]
 allow = [
     "Apache-2.0",
+    "BSD-3-Clause",
     "MIT",
     "Unicode-3.0"
 ]
