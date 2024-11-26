@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package example;
+
+import "google/protobuf/timestamp.proto";
+
+service ExampleService {
+  rpc Test(TestRequest) returns (TestResponse) {}
+}
+
+message TestRequest {
+  string string = 1;
+  google.protobuf.Timestamp time = 2;
+}
+
+message TestResponse {
+  string string = 1;
+  google.protobuf.Timestamp time = 2;
+}

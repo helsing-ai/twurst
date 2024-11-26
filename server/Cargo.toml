@@ -12,7 +12,7 @@ grpc = ["dep:tonic"]
 
 [dependencies]
 twurst-error = { workspace = true, features = ["axum-07"] }
-axum-07.workspace = true
+axum.workspace = true
 http-body-util.workspace = true
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 serde.workspace = true

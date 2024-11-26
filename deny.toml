@@ -6,7 +6,6 @@ deny = [
     { crate = "openssl-sys", reason = "TLS implementations should be optional and not mandatory" },
     { crate = "rustls", reason = "TLS implementations should be optional and not mandatory" },
 ]
-wildcards = "deny"
 
 [licenses]
 allow = [
