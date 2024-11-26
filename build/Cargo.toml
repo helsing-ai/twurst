@@ -1,0 +1,15 @@
+[package]
+name = "twurst-build"
+description = "Build script to generate bindings for .proto files"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[features]
+grpc = []
+
+[dependencies]
+regex.workspace = true
+prost-build.workspace = true
+prost-reflect-build.workspace = true

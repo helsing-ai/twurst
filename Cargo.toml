@@ -1,5 +1,5 @@
 [workspace]
-members = ["client", "error", "server"]
+members = ["build", "client", "error", "server"]
 resolver = "2"
 
 [workspace.package]
@@ -15,7 +15,10 @@ http = "1"
 http-body = "1"
 http-body-util = "0.1"
 prost = "0.13.2"
+prost-build = "0.13.2"
 prost-reflect = "0.14"
+prost-reflect-build = "0.14"
+regex = "1.8.1"
 reqwest-012 = { package = "reqwest", version = "0.12", default-features = false }
 serde = "1.0.132"
 serde_json = "1"
