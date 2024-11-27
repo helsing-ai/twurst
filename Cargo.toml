@@ -5,7 +5,6 @@ resolver = "2"
 [workspace.package]
 authors = ["Thomas Pellissier-Tanon <thomas.pellissier-tanon@helsing.ai>"]
 edition = "2021"
-version = "0.0.0"
 license = "Apache-2.0"
 rust-version = "1.79"
 
@@ -33,4 +32,4 @@ tower = "0.5.1"
 tower-http = "0.6.2"
 tracing = "0.1.35"
 trait-variant = "0.1.2"
-twurst-error = { path = "error", version = "0.0.0" }
+twurst-error = { path = "error", version = "0.0.1" }

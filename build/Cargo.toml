@@ -1,9 +1,9 @@
 [package]
 name = "twurst-build"
 description = "Build script to generate bindings for .proto files"
+version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
-version.workspace = true
 license.workspace = true
 
 [features]

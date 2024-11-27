@@ -1,0 +1,28 @@
+name: release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  publish_crates:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo login $CRATES_IO_TOKEN
+        env:
+          CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+      - run: cargo publish
+        working-directory: ./error
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./client
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./server
+        continue-on-error: true
+      - run: cargo publish
+        working-directory: ./build
+        continue-on-error: true
