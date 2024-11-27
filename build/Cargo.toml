@@ -1,6 +1,8 @@
 [package]
 name = "twurst-build"
-description = "Build script to generate bindings for .proto files"
+description = "Build script to generate bindings for .proto files for Twirp"
+repository = "https://github.com/helsing-ai/twurst"
+documentation = "https://docs.rs/twurst-build"
 version = "0.0.1"
 authors.workspace = true
 edition.workspace = true

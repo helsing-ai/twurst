@@ -1,6 +1,8 @@
 [package]
 name = "twurst-error"
 description = "Twirp error struct"
+repository = "https://github.com/helsing-ai/twurst"
+documentation = "https://docs.rs/twurst-error"
 version = "0.0.1"
 authors.workspace = true
 edition.workspace = true

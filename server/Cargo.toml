@@ -1,6 +1,9 @@
 [package]
 name = "twurst-server"
 description = "Twirp server related code"
+keywords = ["Twirp"]
+repository = "https://github.com/helsing-ai/twurst"
+documentation = "https://docs.rs/twurst-server"
 version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
