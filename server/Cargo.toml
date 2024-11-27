@@ -1,9 +1,9 @@
 [package]
 name = "twurst-server"
 description = "Twirp server related code"
+version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
-version.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
