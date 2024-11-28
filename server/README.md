@@ -33,6 +33,7 @@ If you are using Nix, `nix-shell -p protobuf` is enough to provide `protoc`.
 Then you can implement a Twirp server with:
 ```rust,ignore
 use proto::*;
+use twurst_server::twirp_fallback;
 
 mod proto {
     include!(concat!(env!("OUT_DIR"), "/example.rs")); // example is the name of your proto package
@@ -54,18 +55,20 @@ async fn main() {
     axum::serve(
         tokio::net::TcpListener::bind("localhost:8080").await?,
         axum::Router::new()
-            .nest("/twirp", ExampleServiceServicer {}.into_router())
+            .nest("/twirp", ExampleServiceServicer {}.into_router().fallback(twirp_fallback))
     ).await
 }
 ```
 
 Note that you can make use of [`tower`](https://docs.rs/tower) or [`tower-http`](https://docs.rs/tower-http) layers to customize the server:
 ```rust,ignore
+use twurst_server::twirp_fallback;
+
 async fn main() {
     axum::serve(
         tokio::net::TcpListener::bind("localhost:8080").await?,
         axum::Router::new()
-            .nest("/twirp", ExampleServiceServicer {}.into_router())
+            .nest("/twirp", ExampleServiceServicer {}.into_router().fallback(twirp_fallback))
             .layer(tower_http::cors::CorsLayer::new())
     ).await
 }
@@ -95,8 +98,14 @@ Any type implementing [`FromRequestParts`](https://docs.rs/axum/latest/axum/extr
 
 Note that you can use [`Router::merge`](https://docs.rs/axum/latest/axum/struct.Router.html#method.merge) to serve multiple Twirp services:
 ```rust,ignore
-ExampleServiceServicer {}.into_router().merge(OtherExampleServiceServicer {}.into_router())
+use twurst_server::twirp_fallback;
+
+ExampleServiceServicer {}
+    .into_router()
+    .merge(OtherExampleServiceServicer {}.into_router())
+    .fallback(twirp_fallback)
 ```
+Note the single `fallback` call.
 
 To make testing easier you can use the generated client code to test your server:
 ```rust,ignore
@@ -113,10 +122,12 @@ note that you need to add to your `build.rs` `.with_client()` alongside `.with_s
 
 For that enable the `grpc` feature of the `twurst-server` crate, then you can serve gRPC nearly like Twirp:
 ```rust,ignore
+use twurst_server::grpc_fallback;
+
 async fn main() {
     axum::serve(
         tokio::net::TcpListener::bind("localhost:8080").await?,
-        ExampleServiceServicer {}.into_grpc_router()
+        ExampleServiceServicer {}.into_grpc_router().fallback(grpc_fallback)
     ).await
 }
 ```

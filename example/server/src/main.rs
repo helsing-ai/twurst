@@ -5,7 +5,7 @@ use std::error::Error;
 use tokio::join;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
-use twurst_server::TwirpError;
+use twurst_server::{grpc_fallback, twirp_fallback, TwirpError};
 
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/example.rs"));
@@ -17,7 +17,7 @@ impl ExampleService for ExampleServiceServicer {
     async fn test(
         &self,
         request: TestRequest,
-        _headers: HeaderMap, // We have access to the headers because we customize the build in build.rs
+        _headers: HeaderMap, /* We have access to the headers because we customize the build in build.rs */
     ) -> Result<TestResponse, TwirpError> {
         Ok(TestResponse {
             string: request.string,
@@ -32,7 +32,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let twirp_service = axum::serve(
         TcpListener::bind("localhost:8080").await?,
         Router::new()
-            .nest("/twirp", ExampleServiceServicer {}.into_router())
+            .nest(
+                "/twirp",
+                ExampleServiceServicer {}
+                    .into_router()
+                    .fallback(twirp_fallback),
+            )
             .layer(
                 CorsLayer::new()
                     .allow_methods(Any)
@@ -44,7 +49,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     // We expose also gRPC for gRPC-only clients on another port
     let grpc_service = axum::serve(
         TcpListener::bind("localhost:8081").await?,
-        ExampleServiceServicer {}.into_grpc_router(),
+        ExampleServiceServicer {}
+            .into_grpc_router()
+            .fallback(grpc_fallback),
     );
 
     let (twirp_result, grpc_result) = join!(twirp_service, grpc_service);
