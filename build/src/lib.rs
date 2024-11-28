@@ -5,7 +5,7 @@
 pub use prost_build as prost;
 use prost_build::{Config, Module, Service, ServiceGenerator};
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
@@ -199,7 +199,7 @@ impl TwirpBuilder {
 struct TwirpServiceGenerator {
     client: bool,
     server: bool,
-    request_extractors: HashMap<String, String>,
+    request_extractors: Vec<(String, String)>,
 }
 
 impl TwirpServiceGenerator {
@@ -223,7 +223,7 @@ impl TwirpServiceGenerator {
         type_name: impl Into<String>,
     ) -> Self {
         self.request_extractors
-            .insert(name.into(), type_name.into());
+            .push((name.into(), type_name.into()));
         self
     }
 }
@@ -338,7 +338,7 @@ impl TwirpServiceGenerator {
                 write!(buf, "| {{")?;
                 writeln!(buf, "                async move {{")?;
                 write!(buf, "                    service.{}(request", method.name)?;
-                for _ in self.request_extractors.values() {
+                for _ in 0..self.request_extractors.len() {
                     write!(
                         buf,
                         ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
@@ -375,7 +375,7 @@ impl TwirpServiceGenerator {
                     write!(buf, "| {{")?;
                     writeln!(buf, "                async move {{")?;
                     write!(buf, "                    service.{}(request", method.name)?;
-                    for _ in self.request_extractors.values() {
+                    for _ in 0..self.request_extractors.len() {
                         write!(
                             buf,
                             ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
