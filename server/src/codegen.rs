@@ -6,7 +6,7 @@ use axum::http::header::CONTENT_TYPE;
 pub use axum::http::request::Parts as RequestParts;
 #[cfg(feature = "grpc")]
 use axum::http::Method;
-use axum::http::{HeaderMap, HeaderValue, Uri};
+use axum::http::{HeaderMap, HeaderValue};
 pub use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::post;
@@ -67,12 +67,7 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
     }
 
     pub fn build(self) -> Router<RS> {
-        self.router.fallback(|uri: Uri| async move {
-            TwirpError::new(
-                TwirpErrorCode::BadRoute,
-                format!("{} is not a supported Twirp method", uri.path()),
-            )
-        })
+        self.router
     }
 }
 
@@ -308,13 +303,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     }
 
     pub fn build(self) -> Router {
-        self.router.fallback(|uri: Uri| async move {
-            tonic::Status::new(
-                tonic::Code::NotFound,
-                format!("{} is not a supported gRPC method", uri.path()),
-            )
-            .into_http()
-        })
+        self.router
     }
 }
 
@@ -337,6 +326,7 @@ pub async fn twirp_error_from_response(response: impl IntoResponse) -> TwirpErro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::twirp_fallback;
     #[cfg(feature = "grpc")]
     use axum::http::uri::PathAndQuery;
     use axum::http::{Method, Request, StatusCode};
@@ -367,7 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_route() {
-        let router = TwirpRouter::new(()).build();
+        let router = TwirpRouter::new(()).build().fallback(twirp_fallback);
         let response = router
             .into_service()
             .call(Request::new(Body::empty()))
