@@ -206,8 +206,6 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
         path: &str,
         callback: C,
     ) -> Self {
-        use tonic::{Code, Status};
-
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -221,8 +219,6 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
                 > {
                     service: S,
                     callback: C,
-                    // TODO: Why do we need these?
-                    // (vsiles) I/O seems to be necessary for the UnaryService impl.
                     input: PhantomData<I>,
                     output: PhantomData<O>,
                     future: PhantomData<F>,
@@ -239,8 +235,9 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
                     type Response = O;
                     type Future = Pin<
                         Box<
-                            dyn Future<Output = Result<tonic::Response<Self::Response>, Status>>
-                                + Send
+                            dyn Future<
+                                    Output = Result<tonic::Response<Self::Response>, tonic::Status>,
+                                > + Send
                                 + 'static,
                         >,
                     >;
@@ -253,37 +250,9 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
                         let (parts, ()) = request_builder.body(()).unwrap().into_parts();
                         let result_future = (self.callback)(self.service.clone(), request, parts);
                         Box::pin(async move {
-                            match result_future.await {
-                                Ok(response) => Ok(tonic::Response::new(response)),
-                                Err(error) => Err(Status::new(
-                                    // TODO: extract this into proper `From` impl
-                                    match error.code() {
-                                        TwirpErrorCode::Canceled => Code::Cancelled,
-                                        TwirpErrorCode::Unknown => Code::Unknown,
-                                        TwirpErrorCode::InvalidArgument => Code::InvalidArgument,
-                                        TwirpErrorCode::Malformed => Code::InvalidArgument,
-                                        TwirpErrorCode::DeadlineExceeded => Code::DeadlineExceeded,
-                                        TwirpErrorCode::NotFound => Code::NotFound,
-                                        TwirpErrorCode::BadRoute => Code::NotFound,
-                                        TwirpErrorCode::AlreadyExists => Code::AlreadyExists,
-                                        TwirpErrorCode::PermissionDenied => Code::PermissionDenied,
-                                        TwirpErrorCode::Unauthenticated => Code::Unauthenticated,
-                                        TwirpErrorCode::ResourceExhausted => {
-                                            Code::ResourceExhausted
-                                        }
-                                        TwirpErrorCode::FailedPrecondition => {
-                                            Code::FailedPrecondition
-                                        }
-                                        TwirpErrorCode::Aborted => Code::Aborted,
-                                        TwirpErrorCode::OutOfRange => Code::OutOfRange,
-                                        TwirpErrorCode::Unimplemented => Code::Unimplemented,
-                                        TwirpErrorCode::Internal => Code::Internal,
-                                        TwirpErrorCode::Unavailable => Code::Unavailable,
-                                        TwirpErrorCode::Dataloss => Code::DataLoss,
-                                    },
-                                    error.into_message(),
-                                )),
-                            }
+                            Ok(tonic::Response::new(
+                                result_future.await.map_err(grpc_status_for_twirp_error)?,
+                            ))
                         })
                     }
                 }
@@ -305,6 +274,34 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn build(self) -> Router {
         self.router
     }
+}
+
+#[cfg(feature = "grpc")]
+fn grpc_status_for_twirp_error(error: TwirpError) -> tonic::Status {
+    tonic::Status::new(
+        // TODO: extract this into proper `From` impl
+        match error.code() {
+            TwirpErrorCode::Canceled => tonic::Code::Cancelled,
+            TwirpErrorCode::Unknown => tonic::Code::Unknown,
+            TwirpErrorCode::InvalidArgument => tonic::Code::InvalidArgument,
+            TwirpErrorCode::Malformed => tonic::Code::InvalidArgument,
+            TwirpErrorCode::DeadlineExceeded => tonic::Code::DeadlineExceeded,
+            TwirpErrorCode::NotFound => tonic::Code::NotFound,
+            TwirpErrorCode::BadRoute => tonic::Code::NotFound,
+            TwirpErrorCode::AlreadyExists => tonic::Code::AlreadyExists,
+            TwirpErrorCode::PermissionDenied => tonic::Code::PermissionDenied,
+            TwirpErrorCode::Unauthenticated => tonic::Code::Unauthenticated,
+            TwirpErrorCode::ResourceExhausted => tonic::Code::ResourceExhausted,
+            TwirpErrorCode::FailedPrecondition => tonic::Code::FailedPrecondition,
+            TwirpErrorCode::Aborted => tonic::Code::Aborted,
+            TwirpErrorCode::OutOfRange => tonic::Code::OutOfRange,
+            TwirpErrorCode::Unimplemented => tonic::Code::Unimplemented,
+            TwirpErrorCode::Internal => tonic::Code::Internal,
+            TwirpErrorCode::Unavailable => tonic::Code::Unavailable,
+            TwirpErrorCode::Dataloss => tonic::Code::DataLoss,
+        },
+        error.into_message(),
+    )
 }
 
 pub async fn twirp_error_from_response(response: impl IntoResponse) -> TwirpError {
