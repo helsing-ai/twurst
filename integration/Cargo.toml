@@ -7,18 +7,19 @@ license.workspace = true
 publish = false
 
 [dependencies]
-twurst-server = { path = "../server", features = ["grpc"] }
-twurst-client = { path = "../client", features = ["reqwest-012"] }
+twurst-server = { path = "../server", features = ["grpc", "twurst-stream"] }
+twurst-client = { path = "../client", features = ["reqwest-012", "twurst-stream"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 eyre.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 prost-reflect.workspace = true
 tokio = { workspace = true, features = ["rt"] }
+tokio-stream.workspace = true
 tonic = { workspace = true, features = ["default"] }
 tower.workspace = true
 tower-http = { workspace = true, features = ["auth", "cors"] }
 
 [build-dependencies]
-twurst-build = { path = "../build", features = ["grpc"] }
+twurst-build = { path = "../build", features = ["grpc", "twurst-stream"] }
 tonic-build.workspace = true

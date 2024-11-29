@@ -130,7 +130,7 @@ impl TwirpBuilder {
                             method.name(), service.name(), file_descriptor.name()
                         )));
                     }
-                    if method.server_streaming() {
+                    if !cfg!(feature = "twurst-stream") && method.server_streaming() {
                         return Err(Error::other(format!(
                             "Server streaming is not supported in method {} of service {} in file {}",
                             method.name(), service.name(), file_descriptor.name()
@@ -272,17 +272,31 @@ impl TwirpServiceGenerator {
                 if method.options.deprecated.unwrap_or(false) {
                     writeln!(buf, "#[deprecated]")?;
                 }
-                writeln!(
-                    buf,
-                    "    pub async fn {}(&self, request: &{}) -> Result<{}, ::twurst_client::TwirpError> {{",
-                    method.name, method.input_type, method.output_type,
-                )?;
-                writeln!(
-                    buf,
-                    "        self.client.call(\"/{}.{}/{}\", request).await",
-                    service.package, service.proto_name, method.proto_name,
-                )?;
-                writeln!(buf, "    }}")?;
+                if method.server_streaming {
+                    writeln!(
+                        buf,
+                        "    pub async fn {}(&self, request: &{}) -> Result<impl ::twurst_client::codegen::Stream<Item=Result<{},::twurst_client::TwirpError>>, ::twurst_client::TwirpError> {{",
+                        method.name, method.input_type, method.output_type,
+                    )?;
+                    writeln!(
+                        buf,
+                        "        self.client.call_server_streaming(\"/{}.{}/{}\", request).await",
+                        service.package, service.proto_name, method.proto_name,
+                    )?;
+                    writeln!(buf, "    }}")?;
+                } else {
+                    writeln!(
+                        buf,
+                        "    pub async fn {}(&self, request: &{}) -> Result<{}, ::twurst_client::TwirpError> {{",
+                        method.name, method.input_type, method.output_type,
+                    )?;
+                    writeln!(
+                        buf,
+                        "        self.client.call(\"/{}.{}/{}\", request).await",
+                        service.package, service.proto_name, method.proto_name,
+                    )?;
+                    writeln!(buf, "    }}")?;
+                }
             }
             writeln!(buf, "}}")?;
         }
@@ -306,11 +320,14 @@ impl TwirpServiceGenerator {
                 for (arg_name, arg_type) in &self.request_extractors {
                     write!(buf, ", {arg_name}: {arg_type}")?;
                 }
-                writeln!(
-                    buf,
-                    ") -> Result<{}, ::twurst_server::TwirpError>;",
-                    method.output_type
-                )?;
+                writeln!(buf, ") -> Result<")?;
+                if method.server_streaming {
+                    // TODO: move back to `impl` when we will be able to use precise capturing to not capture &self
+                    writeln!(buf, "Box<dyn ::twurst_server::codegen::Stream<Item=Result<{}, ::twurst_server::TwirpError>> + Send>", method.output_type)?;
+                } else {
+                    writeln!(buf, "{}", method.output_type)?;
+                }
+                writeln!(buf, ", ::twurst_server::TwirpError>;")?;
             }
             writeln!(buf)?;
             writeln!(
@@ -322,10 +339,19 @@ impl TwirpServiceGenerator {
                 "        ::twurst_server::codegen::TwirpRouter::new(::std::sync::Arc::new(self))"
             )?;
             for method in &service.methods {
+                let method_name = if method.server_streaming {
+                    "route_server_streaming"
+                } else {
+                    "route"
+                };
                 write!(
                     buf,
-                    "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
-                    service.package, service.proto_name, method.proto_name, method.input_type,
+                    "            .{}(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
+                    method_name,
+                    service.package,
+                    service.proto_name,
+                    method.proto_name,
+                    method.input_type,
                 )?;
                 if self.request_extractors.is_empty() {
                     write!(buf, ", _: ::twurst_server::codegen::RequestParts, _: S")?;
@@ -336,16 +362,22 @@ impl TwirpServiceGenerator {
                     )?;
                 }
                 write!(buf, "| {{")?;
-                writeln!(buf, "                async move {{")?;
-                write!(buf, "                    service.{}(request", method.name)?;
+                write!(buf, "                async move {{")?;
+                if method.server_streaming {
+                    write!(buf, "Ok(Box::into_pin(")?;
+                }
+                write!(buf, "service.{}(request", method.name)?;
                 for _ in 0..self.request_extractors.len() {
                     write!(
                         buf,
                         ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
                     )?;
                 }
-                writeln!(buf, ").await")?;
-                writeln!(buf, "                }}")?;
+                write!(buf, ").await")?;
+                if method.server_streaming {
+                    write!(buf, "?))")?;
+                }
+                writeln!(buf, "}}")?;
                 writeln!(buf, "            }})")?;
             }
             writeln!(buf, "            .build()")?;
@@ -362,9 +394,14 @@ impl TwirpServiceGenerator {
                     "        ::twurst_server::codegen::GrpcRouter::new(::std::sync::Arc::new(self))"
                 )?;
                 for method in &service.methods {
+                    let method_name = if method.server_streaming {
+                        "route_server_streaming"
+                    } else {
+                        "route"
+                    };
                     write!(
                         buf,
-                        "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
+                        "            .{}(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",method_name,
                         service.package, service.proto_name, method.proto_name, method.input_type,
                     )?;
                     if self.request_extractors.is_empty() {
@@ -373,16 +410,22 @@ impl TwirpServiceGenerator {
                         write!(buf, ", mut parts: ::twurst_server::codegen::RequestParts")?;
                     }
                     write!(buf, "| {{")?;
-                    writeln!(buf, "                async move {{")?;
-                    write!(buf, "                    service.{}(request", method.name)?;
+                    write!(buf, "                async move {{")?;
+                    if method.server_streaming {
+                        write!(buf, "Ok(Box::into_pin(")?;
+                    }
+                    write!(buf, "service.{}(request", method.name)?;
                     for _ in 0..self.request_extractors.len() {
                         write!(
                             buf,
                             ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
                         )?;
                     }
-                    writeln!(buf, ").await")?;
-                    writeln!(buf, "                }}")?;
+                    write!(buf, ").await")?;
+                    if method.server_streaming {
+                        write!(buf, "?))")?;
+                    }
+                    writeln!(buf, "}}")?;
                     writeln!(buf, "            }})")?;
                 }
                 writeln!(buf, "            .build()")?;

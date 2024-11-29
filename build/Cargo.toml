@@ -10,6 +10,7 @@ license.workspace = true
 
 [features]
 grpc = []
+twurst-stream = []
 
 [dependencies]
 regex.workspace = true

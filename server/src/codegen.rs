@@ -13,20 +13,31 @@ use axum::routing::post;
 use axum::RequestExt;
 pub use axum::Router;
 use http_body_util::BodyExt;
+use prost::bytes::BufMut;
 use prost_reflect::bytes::{Bytes, BytesMut};
 use prost_reflect::{DynamicMessage, ReflectMessage};
 use serde::Serialize;
+use std::convert::Infallible;
 use std::future::Future;
 #[cfg(feature = "grpc")]
 use std::marker::PhantomData;
 #[cfg(feature = "grpc")]
 use std::pin::Pin;
+#[cfg(feature = "twurst-stream")]
+pub use tokio_stream::Stream;
+#[cfg(feature = "twurst-stream")]
+use tokio_stream::StreamExt;
 use tracing::error;
 pub use trait_variant::make as trait_variant_make;
 use twurst_error::TwirpErrorCode;
 
 const APPLICATION_JSON: HeaderValue = HeaderValue::from_static("application/json");
 const APPLICATION_PROTOBUF: HeaderValue = HeaderValue::from_static("application/protobuf");
+#[cfg(feature = "twurst-stream")]
+const APPLICATION_JSONL: HeaderValue = HeaderValue::from_static("application/jsonl");
+#[cfg(feature = "twurst-stream")]
+const APPLICATION_PROTOBUF_STREAM: HeaderValue =
+    HeaderValue::from_static("application/x-twurst-protobuf-stream");
 
 pub struct TwirpRouter<S, RS = ()> {
     router: Router<RS>,
@@ -66,6 +77,33 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
         self
     }
 
+    #[cfg(feature = "twurst-stream")]
+    pub fn route_server_streaming<
+        I: ReflectMessage + Default,
+        O: ReflectMessage,
+        F: Future<Output = Result<OS, TwirpError>> + Send,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    >(
+        mut self,
+        path: &str,
+        call: impl (Fn(S, I, RequestParts, RS) -> F) + Clone + Send + 'static,
+    ) -> Self {
+        let service = self.service.clone();
+        self.router = self.router.route(
+            path,
+            post(
+                move |State(state): State<RS>, request: Request| async move {
+                    let (parts, body) = request.with_limited_body().into_parts();
+                    let content_type = ContentType::from_headers(&parts.headers)?;
+                    let request = parse_request(content_type, body).await?;
+                    let response = call(service, request, parts, state).await?;
+                    serialize_stream_response(content_type.into(), response)
+                },
+            ),
+        );
+        self
+    }
+
     pub fn build(self) -> Router<RS> {
         self.router
     }
@@ -83,14 +121,50 @@ impl ContentType {
             .get(CONTENT_TYPE)
             .ok_or_else(|| TwirpError::malformed("No content-type header"))?;
         if content_type == APPLICATION_PROTOBUF {
-            Ok(ContentType::Protobuf)
+            Ok(Self::Protobuf)
         } else if content_type == APPLICATION_JSON {
-            Ok(ContentType::Json)
+            Ok(Self::Json)
         } else {
             Err(TwirpError::malformed(format!(
                 "Unsupported content type: {}",
                 String::from_utf8_lossy(content_type.as_bytes())
             )))
+        }
+    }
+}
+
+impl From<ContentType> for HeaderValue {
+    fn from(content_type: ContentType) -> Self {
+        match content_type {
+            ContentType::Protobuf => APPLICATION_PROTOBUF,
+            ContentType::Json => APPLICATION_JSON,
+        }
+    }
+}
+
+#[cfg(feature = "twurst-stream")]
+#[derive(Clone, Copy)]
+enum StreamContentType {
+    Protobuf,
+    Json,
+}
+
+#[cfg(feature = "twurst-stream")]
+impl From<StreamContentType> for HeaderValue {
+    fn from(content_type: StreamContentType) -> Self {
+        match content_type {
+            StreamContentType::Protobuf => APPLICATION_PROTOBUF_STREAM,
+            StreamContentType::Json => APPLICATION_JSONL,
+        }
+    }
+}
+
+#[cfg(feature = "twurst-stream")]
+impl From<ContentType> for StreamContentType {
+    fn from(content_type: ContentType) -> Self {
+        match content_type {
+            ContentType::Protobuf => Self::Protobuf,
+            ContentType::Json => Self::Json,
         }
     }
 }
@@ -122,7 +196,7 @@ fn serialize_response<O: ReflectMessage>(
     content_type: ContentType,
     response: O,
 ) -> Result<Response, TwirpError> {
-    let (content_type, body) = match content_type {
+    match content_type {
         ContentType::Protobuf => {
             let mut buffer = BytesMut::with_capacity(response.encoded_len());
             response.encode(&mut buffer).map_err(|e| {
@@ -132,21 +206,108 @@ fn serialize_response<O: ReflectMessage>(
                     e,
                 )
             })?;
-            (APPLICATION_PROTOBUF, buffer.into())
+            build_response(ContentType::Protobuf, Bytes::from(buffer))
         }
-        ContentType::Json => (APPLICATION_JSON, json_encode(&response)?),
-    };
+        ContentType::Json => build_response(
+            ContentType::Json,
+            Bytes::from(json_encode(&response, BytesMut::new())?),
+        ),
+    }
+}
+
+#[cfg(feature = "twurst-stream")]
+fn serialize_stream_response<O: ReflectMessage>(
+    content_type: StreamContentType,
+    response: impl Stream<Item = Result<O, TwirpError>> + Send + 'static, // TODO: infallible?
+) -> Result<Response, TwirpError> {
+    match content_type {
+        StreamContentType::Protobuf => build_response(
+            StreamContentType::Protobuf,
+            Body::from_stream(
+                response
+                    .map(|chunk| {
+                        let chunk = chunk?;
+                        let chunk_len = chunk.encoded_len();
+                        let mut buffer = BytesMut::with_capacity(5 + chunk_len);
+                        buffer.put_u8(0);
+                        buffer.put_u32(u32::try_from(chunk_len).map_err(|e| {
+                            TwirpError::wrap(
+                                TwirpErrorCode::Internal,
+                                "Too large message, its length must fit in 32bits",
+                                e,
+                            )
+                        })?);
+                        chunk.encode(&mut buffer).map_err(|e| {
+                            TwirpError::wrap(
+                                TwirpErrorCode::Internal,
+                                format!("Failed to serialize to protobuf: {e}"),
+                                e,
+                            )
+                        })?;
+                        Ok::<_, TwirpError>(buffer)
+                    })
+                    .map(|result| {
+                        // We transmit errors as regular messages
+                        Ok::<_, Infallible>(match result {
+                            Ok(buffer) => buffer,
+                            Err(e) => {
+                                let e = serde_json::to_vec(&e).unwrap();
+                                let mut buffer = BytesMut::with_capacity(5 + e.len());
+                                buffer.put_u8(48);
+                                buffer.put_u32(e.len().try_into().unwrap_or_default());
+                                buffer.put_slice(&e);
+                                buffer
+                            }
+                        })
+                    }),
+            ),
+        ),
+        StreamContentType::Json => build_response(
+            StreamContentType::Json,
+            Body::from_stream(
+                response
+                    .map(|chunk| {
+                        let chunk = chunk?;
+                        let mut buffer = BytesMut::new();
+                        buffer.put_slice(b"{\"message\":");
+                        let mut buffer = json_encode(&chunk, buffer)?;
+                        buffer.put_slice(b"}");
+                        Ok(buffer)
+                    })
+                    .map(|result| {
+                        // We transmit errors as regular messages
+                        Ok::<_, Infallible>(match result {
+                            Ok(buffer) => buffer,
+                            Err(error) => {
+                                #[derive(Serialize)]
+                                struct JsonStreamError {
+                                    error: TwirpError,
+                                }
+                                Bytes::from(serde_json::to_vec(&JsonStreamError { error }).unwrap())
+                                    .into()
+                            }
+                        })
+                    }),
+            ),
+        ),
+    }
+}
+
+fn build_response(
+    content_type: impl Into<HeaderValue>,
+    body: impl Into<Body>,
+) -> Result<Response, TwirpError> {
     Response::builder()
         .header(CONTENT_TYPE, content_type)
-        .body(Body::from(body))
+        .body(body.into())
         .map_err(|e| {
             error!("Failed to build the response: {e}");
             TwirpError::internal("Failed to build the response")
         })
 }
 
-fn json_encode<T: ReflectMessage>(message: &T) -> Result<Bytes, TwirpError> {
-    let mut serializer = serde_json::Serializer::new(Vec::new());
+fn json_encode<T: ReflectMessage>(message: &T, buffer: BytesMut) -> Result<BytesMut, TwirpError> {
+    let mut serializer = serde_json::Serializer::new(buffer.writer());
     message
         .transcode_to_dynamic()
         .serialize(&mut serializer)
@@ -154,7 +315,7 @@ fn json_encode<T: ReflectMessage>(message: &T) -> Result<Bytes, TwirpError> {
             error!("Failed to serialize the JSON response: {e}");
             TwirpError::internal("Failed to build the response")
         })?;
-    Ok(serializer.into_inner().into())
+    Ok(serializer.into_inner().into_inner())
 }
 
 fn json_decode<T: ReflectMessage + Default>(message: &[u8]) -> Result<T, TwirpError> {
@@ -266,6 +427,93 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
                 let codec = tonic::codec::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.unary(method, request).await
+            }),
+        );
+        self
+    }
+
+    pub fn route_server_streaming<
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    >(
+        mut self,
+        path: &str,
+        callback: C,
+    ) -> Self {
+        let service = self.service.clone();
+        self.router = self.router.route(
+            path,
+            post(move |request: Request| async move {
+                struct ServerStreamingService<
+                    S: Clone + Send + Sync + 'static,
+                    I: ReflectMessage + Default + 'static,
+                    O: ReflectMessage + 'static,
+                    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+                    F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+                    OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+                > {
+                    service: S,
+                    callback: C,
+                    input: PhantomData<I>,
+                    output: PhantomData<O>,
+                    future: PhantomData<F>,
+                }
+
+                impl<
+                        S: Clone + Send + Sync + 'static,
+                        I: ReflectMessage + Default + 'static,
+                        O: ReflectMessage + 'static,
+                        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+                        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+                        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+                    > tonic::server::ServerStreamingService<I>
+                    for ServerStreamingService<S, I, O, C, F, OS>
+                {
+                    type Response = O;
+                    type ResponseStream =
+                        Pin<Box<dyn Stream<Item = Result<Self::Response, tonic::Status>> + Send>>;
+                    type Future = Pin<
+                        Box<
+                            dyn Future<
+                                    Output = Result<
+                                        tonic::Response<Self::ResponseStream>,
+                                        tonic::Status,
+                                    >,
+                                > + Send,
+                        >,
+                    >;
+
+                    fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
+                        let (metadata, extensions, request) = request.into_parts();
+                        let mut request_builder = Request::builder().method(Method::POST);
+                        *request_builder.headers_mut().unwrap() = metadata.into_headers();
+                        *request_builder.extensions_mut().unwrap() = extensions;
+                        let (parts, ()) = request_builder.body(()).unwrap().into_parts();
+                        let result_future = (self.callback)(self.service.clone(), request, parts);
+                        Box::pin(async move {
+                            Ok(tonic::Response::new(Box::pin(
+                                result_future
+                                    .await
+                                    .map_err(grpc_status_for_twirp_error)?
+                                    .map(|item| item.map_err(grpc_status_for_twirp_error)),
+                            )
+                                as Self::ResponseStream))
+                        })
+                    }
+                }
+                let method = ServerStreamingService {
+                    service,
+                    callback,
+                    input: PhantomData,
+                    output: PhantomData,
+                    future: PhantomData,
+                };
+                let codec = tonic::codec::ProstCodec::default();
+                let mut grpc = tonic::server::Grpc::new(codec);
+                grpc.server_streaming(method, request).await
             }),
         );
         self

@@ -1,5 +1,6 @@
 use eyre::Result;
 use std::time::{Duration, SystemTime};
+use tokio_stream::StreamExt;
 use tower::ServiceBuilder;
 use tower_http::auth::AddAuthorizationLayer;
 use twurst_client::TwirpHttpClient;
@@ -66,6 +67,27 @@ async fn test_wrong_password() -> Result<()> {
     ));
     let error = client.test(&data.clone().try_into()?).await.unwrap_err();
     assert_eq!(error, TwirpError::unauthenticated("Invalid password"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_streaming_twirp_echo_protobuf() -> Result<()> {
+    let data = example_data();
+    let client = IntegrationServiceClient::new(TwirpHttpClient::new(
+        ServiceBuilder::new()
+            .layer(AddAuthorizationLayer::bearer("password"))
+            .service(IntegrationServiceServicer {}.into_router()),
+    ));
+    let response = client
+        .test_server_stream(&data.clone().try_into()?)
+        .await?
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(Data::try_from(response[0].clone()?)?, data);
+    assert_eq!(
+        response[1].clone().unwrap_err(),
+        TwirpError::not_found("foo")
+    );
     Ok(())
 }
 

@@ -12,19 +12,21 @@ rust-version.workspace = true
 
 [features]
 grpc = ["dep:tonic"]
+twurst-stream = ["dep:tokio-stream"]
 
 [dependencies]
 twurst-error = { workspace = true, features = ["axum-07"] }
 axum.workspace = true
 http-body-util.workspace = true
+prost.workspace = true
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 serde.workspace = true
 serde_json.workspace = true
 tonic = { workspace = true, optional = true, features = ["transport", "prost"] }
 tracing.workspace = true
+tokio-stream = { workspace = true, optional = true }
 trait-variant.workspace = true
 
 [dev-dependencies]
-prost.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 tower-service.workspace = true

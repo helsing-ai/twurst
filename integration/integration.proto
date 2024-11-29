@@ -9,6 +9,8 @@ import "google/protobuf/struct.proto";
 
 service IntegrationService {
   rpc Test(TestRequest) returns (TestResponse) {}
+
+  rpc TestServerStream(TestRequest) returns (stream TestResponse) {}
 }
 
 message TestNested {

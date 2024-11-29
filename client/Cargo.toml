@@ -12,18 +12,21 @@ rust-version.workspace = true
 
 [features]
 reqwest-012 = ["dep:reqwest-012"]
+twurst-stream = ["dep:tokio-stream"]
 
 [dependencies]
 http.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
-twurst-error = { workspace = true, features = ["http"] }
+pin-project-lite.workspace = true
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 reqwest-012 = { workspace = true, optional = true }
 serde_json.workspace = true
 serde.workspace = true
+tokio-stream = { workspace = true, optional = true }
 tower-service.workspace = true
 trait-variant.workspace = true
+twurst-error = { workspace = true, features = ["http"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

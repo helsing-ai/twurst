@@ -23,7 +23,7 @@ A [list of other implementations is provided](https://github.com/twitchtv/twirp?
 
 ## This implementation
 
-This is a simple implementation of Twirp.
+This is an implementation of Twirp.
 Its aim is to be a replacement of [`tonic`](https://docs.rs/tonic/) using Twirp instead of gRPC.
 It is also based on [`prost`](https://docs.rs/prost/) with the help of [`prost-reflect`](https://docs.rs/prost-reflect/) for JSON support.
 

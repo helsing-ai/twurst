@@ -8,6 +8,7 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
 use tower_http::cors::{Any, CorsLayer};
+use twurst_client::codegen::Stream;
 use twurst_server::TwirpError;
 
 pub struct IntegrationServiceServicer {}
@@ -33,6 +34,31 @@ impl IntegrationService for IntegrationServiceServicer {
                 test_request::Option::Right(r) => test_response::Option::Right(r),
             }),
         })
+    }
+
+    async fn test_server_stream(
+        &self,
+        request: TestRequest,
+        ExtractBearerToken(bearer_token): ExtractBearerToken,
+    ) -> Result<Box<dyn Stream<Item = Result<TestResponse, TwirpError>> + Send>, TwirpError> {
+        if bearer_token != "password" {
+            return Err(TwirpError::unauthenticated("Invalid password"));
+        }
+        Ok(Box::new(tokio_stream::iter([
+            Ok(TestResponse {
+                string: request.string,
+                time: request.time,
+                nested: request.nested,
+                duration: request.duration,
+                any: request.any,
+                value: request.value,
+                option: request.option.map(|o| match o {
+                    test_request::Option::Left(l) => test_response::Option::Left(l),
+                    test_request::Option::Right(r) => test_response::Option::Right(r),
+                }),
+            }),
+            Err(TwirpError::not_found("foo")),
+        ])))
     }
 }
 
