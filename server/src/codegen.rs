@@ -13,14 +13,20 @@ use axum::routing::post;
 use axum::RequestExt;
 pub use axum::Router;
 use http_body_util::BodyExt;
+#[cfg(feature = "grpc")]
+use pin_project_lite::pin_project;
 use prost_reflect::bytes::{Bytes, BytesMut};
 use prost_reflect::{DynamicMessage, ReflectMessage};
 use serde::Serialize;
 use std::future::Future;
 #[cfg(feature = "grpc")]
-use std::marker::PhantomData;
-#[cfg(feature = "grpc")]
 use std::pin::Pin;
+#[cfg(feature = "grpc")]
+use std::task::{Context, Poll};
+#[cfg(feature = "grpc")]
+pub use tokio_stream::Stream;
+#[cfg(feature = "grpc")]
+use tokio_stream::StreamExt;
 use tracing::error;
 pub use trait_variant::make as trait_variant_make;
 use twurst_error::TwirpErrorCode;
@@ -62,6 +68,16 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
                     serialize_response(content_type, response)
                 },
             ),
+        );
+        self
+    }
+
+    pub fn route_streaming(mut self, path: &str) -> Self {
+        self.router = self.router.route(
+            path,
+            post(move || async move {
+                TwirpError::unimplemented("Streaming is not supported by Twirp")
+            }),
         );
         self
     }
@@ -210,59 +226,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
         self.router = self.router.route(
             path,
             post(move |request: Request| async move {
-                struct SimpleUnaryService<
-                    S: Clone + Send + Sync + 'static,
-                    I: ReflectMessage + Default + 'static,
-                    O: ReflectMessage + 'static,
-                    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-                    F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-                > {
-                    service: S,
-                    callback: C,
-                    input: PhantomData<I>,
-                    output: PhantomData<O>,
-                    future: PhantomData<F>,
-                }
-
-                impl<
-                        S: Clone + Send + Sync + 'static,
-                        I: ReflectMessage + Default + 'static,
-                        O: ReflectMessage + 'static,
-                        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-                        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-                    > tonic::server::UnaryService<I> for SimpleUnaryService<S, I, O, C, F>
-                {
-                    type Response = O;
-                    type Future = Pin<
-                        Box<
-                            dyn Future<
-                                    Output = Result<tonic::Response<Self::Response>, tonic::Status>,
-                                > + Send
-                                + 'static,
-                        >,
-                    >;
-
-                    fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
-                        let (metadata, extensions, request) = request.into_parts();
-                        let mut request_builder = Request::builder().method(Method::POST);
-                        *request_builder.headers_mut().unwrap() = metadata.into_headers();
-                        *request_builder.extensions_mut().unwrap() = extensions;
-                        let (parts, ()) = request_builder.body(()).unwrap().into_parts();
-                        let result_future = (self.callback)(self.service.clone(), request, parts);
-                        Box::pin(async move {
-                            Ok(tonic::Response::new(
-                                result_future.await.map_err(grpc_status_for_twirp_error)?,
-                            ))
-                        })
-                    }
-                }
-                let method = SimpleUnaryService {
-                    service,
-                    callback,
-                    input: PhantomData,
-                    output: PhantomData,
-                    future: PhantomData,
-                };
+                let method = GrpcService { service, callback };
                 let codec = tonic::codec::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.unary(method, request).await
@@ -271,8 +235,231 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
         self
     }
 
+    pub fn route_server_streaming<
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    >(
+        mut self,
+        path: &str,
+        callback: C,
+    ) -> Self {
+        let service = self.service.clone();
+        self.router = self.router.route(
+            path,
+            post(move |request: Request| async move {
+                let method = GrpcService { service, callback };
+                let codec = tonic::codec::ProstCodec::default();
+                let mut grpc = tonic::server::Grpc::new(codec);
+                grpc.server_streaming(method, request).await
+            }),
+        );
+        self
+    }
+
+    pub fn route_client_streaming<
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+    >(
+        mut self,
+        path: &str,
+        callback: C,
+    ) -> Self {
+        let service = self.service.clone();
+        self.router = self.router.route(
+            path,
+            post(move |request: Request| async move {
+                let method = GrpcService { service, callback };
+                let codec = tonic::codec::ProstCodec::default();
+                let mut grpc = tonic::server::Grpc::new(codec);
+                grpc.client_streaming(method, request).await
+            }),
+        );
+        self
+    }
+
+    pub fn route_streaming<
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    >(
+        mut self,
+        path: &str,
+        callback: C,
+    ) -> Self {
+        let service = self.service.clone();
+        self.router = self.router.route(
+            path,
+            post(move |request: Request| async move {
+                let method = GrpcService { service, callback };
+                let codec = tonic::codec::ProstCodec::default();
+                let mut grpc = tonic::server::Grpc::new(codec);
+                grpc.streaming(method, request).await
+            }),
+        );
+        self
+    }
+
     pub fn build(self) -> Router {
         self.router
+    }
+}
+
+#[cfg(feature = "grpc")]
+struct GrpcService<S, C> {
+    service: S,
+    callback: C,
+}
+
+#[cfg(feature = "grpc")]
+impl<
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::UnaryService<I> for GrpcService<S, C>
+{
+    type Response = O;
+    type Future = TonicResponseFuture<O>;
+
+    fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
+        let (request, parts) = grpc_to_twirp_request(request);
+        let result_future = (self.callback)(self.service.clone(), request, parts);
+        Box::pin(async move {
+            Ok(tonic::Response::new(
+                result_future.await.map_err(grpc_status_for_twirp_error)?,
+            ))
+        })
+    }
+}
+
+#[cfg(feature = "grpc")]
+impl<
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::ServerStreamingService<I> for GrpcService<S, C>
+{
+    type Response = O;
+    type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
+    type Future = TonicResponseFuture<Self::ResponseStream>;
+
+    fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
+        let (request, parts) = grpc_to_twirp_request(request);
+        let result_future = (self.callback)(self.service.clone(), request, parts);
+        Box::pin(async move {
+            Ok(tonic::Response::new(Box::pin(
+                result_future
+                    .await
+                    .map_err(grpc_status_for_twirp_error)?
+                    .map(|item| item.map_err(grpc_status_for_twirp_error)),
+            ) as Self::ResponseStream))
+        })
+    }
+}
+
+#[cfg(feature = "grpc")]
+impl<
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::ClientStreamingService<I> for GrpcService<S, C>
+{
+    type Response = O;
+    type Future = TonicResponseFuture<Self::Response>;
+
+    fn call(&mut self, request: tonic::Request<tonic::Streaming<I>>) -> Self::Future {
+        let (request, parts) = grpc_to_twirp_request(request);
+        let request = GrpcClientStream { stream: request };
+        let result_future = (self.callback)(self.service.clone(), request, parts);
+        Box::pin(async move {
+            Ok(tonic::Response::new(
+                result_future.await.map_err(grpc_status_for_twirp_error)?,
+            ))
+        })
+    }
+}
+
+#[cfg(feature = "grpc")]
+impl<
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::StreamingService<I> for GrpcService<S, C>
+{
+    type Response = O;
+    type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
+    type Future = TonicResponseFuture<Self::ResponseStream>;
+
+    fn call(&mut self, request: tonic::Request<tonic::Streaming<I>>) -> Self::Future {
+        let (request, parts) = grpc_to_twirp_request(request);
+        let request = GrpcClientStream { stream: request };
+        let result_future = (self.callback)(self.service.clone(), request, parts);
+        Box::pin(async move {
+            Ok(tonic::Response::new(Box::pin(
+                result_future
+                    .await
+                    .map_err(grpc_status_for_twirp_error)?
+                    .map(|item| item.map_err(grpc_status_for_twirp_error)),
+            ) as Self::ResponseStream))
+        })
+    }
+}
+
+#[cfg(feature = "grpc")]
+type TonicResponseFuture<R> =
+    Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + 'static>>;
+
+#[cfg(feature = "grpc")]
+fn grpc_to_twirp_request<T>(request: tonic::Request<T>) -> (T, RequestParts) {
+    let (metadata, extensions, request) = request.into_parts();
+    let mut request_builder = Request::builder().method(Method::POST);
+    *request_builder.headers_mut().unwrap() = metadata.into_headers();
+    *request_builder.extensions_mut().unwrap() = extensions;
+    let (parts, ()) = request_builder.body(()).unwrap().into_parts();
+    (request, parts)
+}
+
+#[cfg(feature = "grpc")]
+pin_project! {
+    pub struct GrpcClientStream<O> {
+        #[pin]
+        stream: tonic::Streaming<O>,
+    }
+}
+
+#[cfg(feature = "grpc")]
+impl<O> Stream for GrpcClientStream<O> {
+    type Item = Result<O, TwirpError>;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<O, TwirpError>>> {
+        self.as_mut()
+            .project()
+            .stream
+            .poll_next(cx)
+            .map(|opt| opt.map(|r| r.map_err(twirp_error_for_grpc_status)))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.stream.size_hint()
     }
 }
 
@@ -301,6 +488,33 @@ fn grpc_status_for_twirp_error(error: TwirpError) -> tonic::Status {
             TwirpErrorCode::Dataloss => tonic::Code::DataLoss,
         },
         error.into_message(),
+    )
+}
+
+#[cfg(feature = "grpc")]
+fn twirp_error_for_grpc_status(status: tonic::Status) -> TwirpError {
+    TwirpError::wrap(
+        match status.code() {
+            tonic::Code::Cancelled => TwirpErrorCode::Canceled,
+            tonic::Code::Unknown => TwirpErrorCode::Unknown,
+            tonic::Code::InvalidArgument => TwirpErrorCode::InvalidArgument,
+            tonic::Code::DeadlineExceeded => TwirpErrorCode::DeadlineExceeded,
+            tonic::Code::NotFound => TwirpErrorCode::NotFound,
+            tonic::Code::AlreadyExists => TwirpErrorCode::AlreadyExists,
+            tonic::Code::PermissionDenied => TwirpErrorCode::PermissionDenied,
+            tonic::Code::Unauthenticated => TwirpErrorCode::Unauthenticated,
+            tonic::Code::ResourceExhausted => TwirpErrorCode::ResourceExhausted,
+            tonic::Code::FailedPrecondition => TwirpErrorCode::FailedPrecondition,
+            tonic::Code::Aborted => TwirpErrorCode::Aborted,
+            tonic::Code::OutOfRange => TwirpErrorCode::OutOfRange,
+            tonic::Code::Unimplemented => TwirpErrorCode::Unimplemented,
+            tonic::Code::Internal => TwirpErrorCode::Internal,
+            tonic::Code::Unavailable => TwirpErrorCode::Unavailable,
+            tonic::Code::DataLoss => TwirpErrorCode::Dataloss,
+            tonic::Code::Ok => TwirpErrorCode::Unknown,
+        },
+        status.message().to_string(),
+        status,
     )
 }
 
