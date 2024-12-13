@@ -11,16 +11,18 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-grpc = ["dep:tonic"]
+grpc = ["dep:tonic", "dep:tokio-stream", "dep:pin-project-lite"]
 
 [dependencies]
 twurst-error = { workspace = true, features = ["axum-07"] }
 axum.workspace = true
 http-body-util.workspace = true
+pin-project-lite = { workspace = true, optional = true }
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 serde.workspace = true
 serde_json.workspace = true
 tonic = { workspace = true, optional = true, features = ["transport", "prost"] }
+tokio-stream = { workspace = true, optional = true }
 tracing.workspace = true
 trait-variant.workspace = true
 

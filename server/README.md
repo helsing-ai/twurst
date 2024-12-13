@@ -119,8 +119,9 @@ note that you need to add to your `build.rs` `.with_client()` alongside `.with_s
 ## gRPC support
 
 `twurst-server` has also basic gRPC support to serve easily both Twirp and gRPC.
+The gRPC implementation supports both client and server streaming, opposite to Twirp.
 
-For that enable the `grpc` feature of the `twurst-server` crate, then you can serve gRPC nearly like Twirp:
+For that enable the `grpc` feature of the `twurst-build` and `twurst-server` crates, then you can serve gRPC nearly like Twirp:
 ```rust,ignore
 use twurst_server::grpc_fallback;
 

@@ -1,5 +1,4 @@
 use std::time::SystemTime;
-
 use twurst_example_client::{Data, ExampleClient};
 
 #[tokio::main]

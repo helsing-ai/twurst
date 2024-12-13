@@ -5,8 +5,10 @@ use axum::http::request::Parts;
 use axum::{async_trait, Router};
 use eyre::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::pin::pin;
 use tokio::net::TcpListener;
 use tokio::task::{spawn, JoinHandle};
+use tokio_stream::{Stream, StreamExt};
 use tower_http::cors::{Any, CorsLayer};
 use twurst_server::TwirpError;
 
@@ -21,18 +23,64 @@ impl IntegrationService for IntegrationServiceServicer {
         if bearer_token != "password" {
             return Err(TwirpError::unauthenticated("Invalid password"));
         }
-        Ok(TestResponse {
-            string: request.string,
-            time: request.time,
-            nested: request.nested,
-            duration: request.duration,
-            any: request.any,
-            value: request.value,
-            option: request.option.map(|o| match o {
-                test_request::Option::Left(l) => test_response::Option::Left(l),
-                test_request::Option::Right(r) => test_response::Option::Right(r),
-            }),
-        })
+        Ok(response_from_request(request))
+    }
+
+    async fn test_server_stream(
+        &self,
+        request: TestRequest,
+        ExtractBearerToken(bearer_token): ExtractBearerToken,
+    ) -> Result<Box<dyn Stream<Item = Result<TestResponse, TwirpError>> + Send>, TwirpError> {
+        if bearer_token != "password" {
+            return Err(TwirpError::unauthenticated("Invalid password"));
+        }
+        Ok(Box::new(tokio_stream::iter([
+            Ok(response_from_request(request)),
+            Err(TwirpError::not_found("foo")),
+        ])))
+    }
+
+    async fn test_client_stream(
+        &self,
+        mut request: impl Stream<Item = Result<TestRequest, TwirpError>> + Send,
+        ExtractBearerToken(bearer_token): ExtractBearerToken,
+    ) -> Result<TestResponse, TwirpError> {
+        if bearer_token != "password" {
+            return Err(TwirpError::unauthenticated("Invalid password"));
+        }
+        let request = pin!(request)
+            .next()
+            .await
+            .ok_or_else(|| TwirpError::not_found("No request"))??;
+        Ok(response_from_request(request))
+    }
+
+    async fn test_stream(
+        &self,
+        request: impl Stream<Item = Result<TestRequest, TwirpError>> + Send + 'static,
+        ExtractBearerToken(bearer_token): ExtractBearerToken,
+    ) -> Result<Box<dyn Stream<Item = Result<TestResponse, TwirpError>> + Send>, TwirpError> {
+        if bearer_token != "password" {
+            return Err(TwirpError::unauthenticated("Invalid password"));
+        }
+        Ok(Box::new(
+            request.map(|request| Ok(response_from_request(request?))),
+        ))
+    }
+}
+
+fn response_from_request(request: TestRequest) -> TestResponse {
+    TestResponse {
+        string: request.string,
+        time: request.time,
+        nested: request.nested,
+        duration: request.duration,
+        any: request.any,
+        value: request.value,
+        option: request.option.map(|o| match o {
+            test_request::Option::Left(l) => test_response::Option::Left(l),
+            test_request::Option::Right(r) => test_response::Option::Right(r),
+        }),
     }
 }
 
