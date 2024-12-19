@@ -1,3 +1,12 @@
+## [0.0.3] - 2024-12-19
+
+### Added
+- Server: Streaming requests and responses in the gRPC router (but not in the Twirp router).
+- Server: Nice error when calling streaming methods with Twirp.
+
+### Changed
+- Build: Streaming methods are silently ignored instead of failing the build.
+
 ## [0.0.2] - 2024-11-28
 
 ### Changed
