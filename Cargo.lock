@@ -1474,6 +1474,7 @@ dependencies = [
  "http",
  "serde",
  "serde_json",
+ "tonic",
 ]
 
 [[package]]

@@ -11,7 +11,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-grpc = ["dep:tonic", "dep:tokio-stream", "dep:pin-project-lite"]
+grpc = ["dep:tonic", "dep:tokio-stream", "dep:pin-project-lite", "twurst-error/tonic-012"]
 
 [dependencies]
 twurst-error = { workspace = true, features = ["axum-07"] }

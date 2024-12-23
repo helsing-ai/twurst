@@ -344,6 +344,75 @@ impl axum_core_04::response::IntoResponse for TwirpError {
     }
 }
 
+#[cfg(feature = "tonic-012")]
+impl From<TwirpErrorCode> for tonic_012::Code {
+    #[inline]
+    fn from(code: TwirpErrorCode) -> Self {
+        match code {
+            TwirpErrorCode::Canceled => Self::Cancelled,
+            TwirpErrorCode::Unknown => Self::Unknown,
+            TwirpErrorCode::InvalidArgument => Self::InvalidArgument,
+            TwirpErrorCode::Malformed => Self::InvalidArgument,
+            TwirpErrorCode::DeadlineExceeded => Self::DeadlineExceeded,
+            TwirpErrorCode::NotFound => Self::NotFound,
+            TwirpErrorCode::BadRoute => Self::NotFound,
+            TwirpErrorCode::AlreadyExists => Self::AlreadyExists,
+            TwirpErrorCode::PermissionDenied => Self::PermissionDenied,
+            TwirpErrorCode::Unauthenticated => Self::Unauthenticated,
+            TwirpErrorCode::ResourceExhausted => Self::ResourceExhausted,
+            TwirpErrorCode::FailedPrecondition => Self::FailedPrecondition,
+            TwirpErrorCode::Aborted => Self::Aborted,
+            TwirpErrorCode::OutOfRange => Self::OutOfRange,
+            TwirpErrorCode::Unimplemented => Self::Unimplemented,
+            TwirpErrorCode::Internal => Self::Internal,
+            TwirpErrorCode::Unavailable => Self::Unavailable,
+            TwirpErrorCode::Dataloss => Self::DataLoss,
+        }
+    }
+}
+
+#[cfg(feature = "tonic-012")]
+impl From<TwirpError> for tonic_012::Status {
+    #[inline]
+    fn from(error: TwirpError) -> Self {
+        Self::new(error.code().into(), error.into_message())
+    }
+}
+
+#[cfg(feature = "tonic-012")]
+impl From<tonic_012::Code> for TwirpErrorCode {
+    #[inline]
+    fn from(code: tonic_012::Code) -> TwirpErrorCode {
+        match code {
+            tonic_012::Code::Cancelled => Self::Canceled,
+            tonic_012::Code::Unknown => Self::Unknown,
+            tonic_012::Code::InvalidArgument => Self::InvalidArgument,
+            tonic_012::Code::DeadlineExceeded => Self::DeadlineExceeded,
+            tonic_012::Code::NotFound => Self::NotFound,
+            tonic_012::Code::AlreadyExists => Self::AlreadyExists,
+            tonic_012::Code::PermissionDenied => Self::PermissionDenied,
+            tonic_012::Code::Unauthenticated => Self::Unauthenticated,
+            tonic_012::Code::ResourceExhausted => Self::ResourceExhausted,
+            tonic_012::Code::FailedPrecondition => Self::FailedPrecondition,
+            tonic_012::Code::Aborted => Self::Aborted,
+            tonic_012::Code::OutOfRange => Self::OutOfRange,
+            tonic_012::Code::Unimplemented => Self::Unimplemented,
+            tonic_012::Code::Internal => Self::Internal,
+            tonic_012::Code::Unavailable => Self::Unavailable,
+            tonic_012::Code::DataLoss => Self::Dataloss,
+            tonic_012::Code::Ok => Self::Unknown,
+        }
+    }
+}
+
+#[cfg(feature = "tonic-012")]
+impl From<tonic_012::Status> for TwirpError {
+    #[inline]
+    fn from(status: tonic_012::Status) -> TwirpError {
+        Self::wrap(status.code().into(), status.message().to_string(), status)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
