@@ -16,4 +16,4 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower-http = { workspace = true, features = ["cors"] }
 
 [build-dependencies]
-twurst-build = { path = "../../build", features = ["grpc"] }
+twurst-build.path = "../../build"

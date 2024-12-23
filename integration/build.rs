@@ -5,6 +5,7 @@ fn main() -> std::io::Result<()> {
     twurst_build::TwirpBuilder::new()
         .with_client()
         .with_server()
+        .with_grpc()
         .with_axum_request_extractor("bearer_token", "crate::server::ExtractBearerToken")
         .compile_protos(&["integration.proto"], &["."])?;
 

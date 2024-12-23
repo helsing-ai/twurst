@@ -8,9 +8,6 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[features]
-grpc = []
-
 [dependencies]
 regex.workspace = true
 prost-build.workspace = true

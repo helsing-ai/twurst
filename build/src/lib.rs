@@ -48,6 +48,12 @@ impl TwirpBuilder {
         self
     }
 
+    /// Generates code for gRPC alongside Twirp.
+    pub fn with_grpc(mut self) -> Self {
+        self.generator = self.generator.with_grpc();
+        self
+    }
+
     /// Adds an extra parameter to generated server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
     /// For example
@@ -179,6 +185,7 @@ impl TwirpBuilder {
 struct TwirpServiceGenerator {
     client: bool,
     server: bool,
+    grpc: bool,
     request_extractors: Vec<(String, String)>,
 }
 
@@ -194,6 +201,11 @@ impl TwirpServiceGenerator {
 
     pub fn with_server(mut self) -> Self {
         self.server = true;
+        self
+    }
+
+    pub fn with_grpc(mut self) -> Self {
+        self.grpc = true;
         self
     }
 
@@ -278,7 +290,7 @@ impl TwirpServiceGenerator {
             writeln!(buf, "#[::twurst_server::codegen::trait_variant_make(Send)]")?;
             writeln!(buf, "pub trait {} {{", service.name)?;
             for method in &service.methods {
-                if !cfg!(feature = "grpc") && (method.client_streaming || method.server_streaming) {
+                if !self.grpc && (method.client_streaming || method.server_streaming) {
                     continue; // No streaming
                 }
                 for comment in &method.comments.leading {
@@ -353,7 +365,7 @@ impl TwirpServiceGenerator {
             writeln!(buf, "            .build()")?;
             writeln!(buf, "    }}")?;
 
-            if cfg!(feature = "grpc") {
+            if self.grpc {
                 writeln!(buf)?;
                 writeln!(
                     buf,
