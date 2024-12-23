@@ -13,9 +13,11 @@ rust-version.workspace = true
 axum-07 = ["dep:axum-core-04", "http"]
 http = ["dep:http", "dep:serde_json", "serde"]
 serde = ["dep:serde"]
+tonic-012 = ["dep:tonic-012"]
 
 [dependencies]
 axum-core-04 = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
+tonic-012 = { workspace = true, optional = true }

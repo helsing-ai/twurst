@@ -5,7 +5,8 @@ Please don't use it directly but rely on `twurst-client` or `twurst-server`that 
 - `serde` allows to (de)serialize the error using [Serde](https://serde.rs/) following the official Twirp serialization.
 - `http` allows to convert between [`http::Response`](https://docs.rs/http/latest/http/response/struct.Response.html) objects and Twirp errors,
   properly deserializing the error if possible, or building an as good as possible equivalent if not.
-- `axum-07` implements the [`axum::response::IntoResponse`](https://docs.rs/axum/latest/axum/response/trait.IntoResponse.html) trait on [`TwirpError`].
+- `axum-07` implements the [`axum::response::IntoResponse`](https://docs.rs/axum/0.7/axum/response/trait.IntoResponse.html) trait on `TwirpError`.
+- `tonic-012` implements `From` conversions between `TwirpError`and [`tonic::Status`](https://docs.rs/tonic/0.12/tonic/struct.Status.html) in both directions.
 
 ## License
 

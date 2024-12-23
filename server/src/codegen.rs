@@ -332,11 +332,7 @@ impl<
     fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
         let (request, parts) = grpc_to_twirp_request(request);
         let result_future = (self.callback)(self.service.clone(), request, parts);
-        Box::pin(async move {
-            Ok(tonic::Response::new(
-                result_future.await.map_err(grpc_status_for_twirp_error)?,
-            ))
-        })
+        Box::pin(async move { Ok(tonic::Response::new(result_future.await?)) })
     }
 }
 
@@ -358,12 +354,9 @@ impl<
         let (request, parts) = grpc_to_twirp_request(request);
         let result_future = (self.callback)(self.service.clone(), request, parts);
         Box::pin(async move {
-            Ok(tonic::Response::new(Box::pin(
-                result_future
-                    .await
-                    .map_err(grpc_status_for_twirp_error)?
-                    .map(|item| item.map_err(grpc_status_for_twirp_error)),
-            ) as Self::ResponseStream))
+            Ok(tonic::Response::new(
+                Box::pin(result_future.await?.map(|item| Ok(item?))) as Self::ResponseStream,
+            ))
         })
     }
 }
@@ -384,11 +377,7 @@ impl<
         let (request, parts) = grpc_to_twirp_request(request);
         let request = GrpcClientStream { stream: request };
         let result_future = (self.callback)(self.service.clone(), request, parts);
-        Box::pin(async move {
-            Ok(tonic::Response::new(
-                result_future.await.map_err(grpc_status_for_twirp_error)?,
-            ))
-        })
+        Box::pin(async move { Ok(tonic::Response::new(result_future.await?)) })
     }
 }
 
@@ -411,12 +400,9 @@ impl<
         let request = GrpcClientStream { stream: request };
         let result_future = (self.callback)(self.service.clone(), request, parts);
         Box::pin(async move {
-            Ok(tonic::Response::new(Box::pin(
-                result_future
-                    .await
-                    .map_err(grpc_status_for_twirp_error)?
-                    .map(|item| item.map_err(grpc_status_for_twirp_error)),
-            ) as Self::ResponseStream))
+            Ok(tonic::Response::new(
+                Box::pin(result_future.await?.map(|item| Ok(item?))) as Self::ResponseStream,
+            ))
         })
     }
 }
@@ -455,67 +441,12 @@ impl<O> Stream for GrpcClientStream<O> {
             .project()
             .stream
             .poll_next(cx)
-            .map(|opt| opt.map(|r| r.map_err(twirp_error_for_grpc_status)))
+            .map(|opt| opt.map(|r| Ok(r?)))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.stream.size_hint()
     }
-}
-
-#[cfg(feature = "grpc")]
-fn grpc_status_for_twirp_error(error: TwirpError) -> tonic::Status {
-    tonic::Status::new(
-        // TODO: extract this into proper `From` impl
-        match error.code() {
-            TwirpErrorCode::Canceled => tonic::Code::Cancelled,
-            TwirpErrorCode::Unknown => tonic::Code::Unknown,
-            TwirpErrorCode::InvalidArgument => tonic::Code::InvalidArgument,
-            TwirpErrorCode::Malformed => tonic::Code::InvalidArgument,
-            TwirpErrorCode::DeadlineExceeded => tonic::Code::DeadlineExceeded,
-            TwirpErrorCode::NotFound => tonic::Code::NotFound,
-            TwirpErrorCode::BadRoute => tonic::Code::NotFound,
-            TwirpErrorCode::AlreadyExists => tonic::Code::AlreadyExists,
-            TwirpErrorCode::PermissionDenied => tonic::Code::PermissionDenied,
-            TwirpErrorCode::Unauthenticated => tonic::Code::Unauthenticated,
-            TwirpErrorCode::ResourceExhausted => tonic::Code::ResourceExhausted,
-            TwirpErrorCode::FailedPrecondition => tonic::Code::FailedPrecondition,
-            TwirpErrorCode::Aborted => tonic::Code::Aborted,
-            TwirpErrorCode::OutOfRange => tonic::Code::OutOfRange,
-            TwirpErrorCode::Unimplemented => tonic::Code::Unimplemented,
-            TwirpErrorCode::Internal => tonic::Code::Internal,
-            TwirpErrorCode::Unavailable => tonic::Code::Unavailable,
-            TwirpErrorCode::Dataloss => tonic::Code::DataLoss,
-        },
-        error.into_message(),
-    )
-}
-
-#[cfg(feature = "grpc")]
-fn twirp_error_for_grpc_status(status: tonic::Status) -> TwirpError {
-    TwirpError::wrap(
-        match status.code() {
-            tonic::Code::Cancelled => TwirpErrorCode::Canceled,
-            tonic::Code::Unknown => TwirpErrorCode::Unknown,
-            tonic::Code::InvalidArgument => TwirpErrorCode::InvalidArgument,
-            tonic::Code::DeadlineExceeded => TwirpErrorCode::DeadlineExceeded,
-            tonic::Code::NotFound => TwirpErrorCode::NotFound,
-            tonic::Code::AlreadyExists => TwirpErrorCode::AlreadyExists,
-            tonic::Code::PermissionDenied => TwirpErrorCode::PermissionDenied,
-            tonic::Code::Unauthenticated => TwirpErrorCode::Unauthenticated,
-            tonic::Code::ResourceExhausted => TwirpErrorCode::ResourceExhausted,
-            tonic::Code::FailedPrecondition => TwirpErrorCode::FailedPrecondition,
-            tonic::Code::Aborted => TwirpErrorCode::Aborted,
-            tonic::Code::OutOfRange => TwirpErrorCode::OutOfRange,
-            tonic::Code::Unimplemented => TwirpErrorCode::Unimplemented,
-            tonic::Code::Internal => TwirpErrorCode::Internal,
-            tonic::Code::Unavailable => TwirpErrorCode::Unavailable,
-            tonic::Code::DataLoss => TwirpErrorCode::Dataloss,
-            tonic::Code::Ok => TwirpErrorCode::Unknown,
-        },
-        status.message().to_string(),
-        status,
-    )
 }
 
 pub async fn twirp_error_from_response(response: impl IntoResponse) -> TwirpError {
