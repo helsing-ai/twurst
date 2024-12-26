@@ -1,3 +1,11 @@
+## [0.1.0] - 2024-12-26
+
+### Added
+- Error: `From` implementation from/to Tonic `Code` and `Status`.
+
+### Changed
+- Build: Removes the "grpc" feature and make it a build option named `with_grpc`.
+
 ## [0.0.3] - 2024-12-19
 
 ### Added

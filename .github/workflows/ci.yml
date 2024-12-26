@@ -89,7 +89,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-semver-checks }
-      # TODO: enable after first release - run: cargo semver-checks check-release || true
+      - run: cargo semver-checks check-release
 
   typos:
     runs-on: ubuntu-latest
