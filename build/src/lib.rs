@@ -352,10 +352,10 @@ impl TwirpServiceGenerator {
                 write!(buf, "| {{")?;
                 writeln!(buf, "                async move {{")?;
                 write!(buf, "                    service.{}(request", method.name)?;
-                for _ in 0..self.request_extractors.len() {
+                for (_name, type_name) in &self.request_extractors {
                     write!(
                             buf,
-                            ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
+                            ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
                         )?;
                 }
                 writeln!(buf, ").await")?;
@@ -407,10 +407,10 @@ impl TwirpServiceGenerator {
                         write!(buf, "Ok(Box::into_pin(")?;
                     }
                     write!(buf, "service.{}(request", method.name)?;
-                    for _ in 0..self.request_extractors.len() {
+                    for (_name, type_name) in &self.request_extractors {
                         write!(
                             buf,
-                            ", match ::twurst_server::codegen::FromRequestParts::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
+                            ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
                         )?;
                     }
                     write!(buf, ").await")?;

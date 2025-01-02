@@ -336,16 +336,16 @@ impl<B: AsRef<[u8]>> From<http::Response<B>> for TwirpError {
     }
 }
 
-#[cfg(feature = "axum-07")]
-impl axum_core_04::response::IntoResponse for TwirpError {
+#[cfg(feature = "axum-08")]
+impl axum_core_05::response::IntoResponse for TwirpError {
     #[inline]
-    fn into_response(self) -> axum_core_04::response::Response {
+    fn into_response(self) -> axum_core_05::response::Response {
         self.into()
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<TwirpErrorCode> for tonic_012::Code {
+#[cfg(feature = "tonic-013")]
+impl From<TwirpErrorCode> for tonic_013::Code {
     #[inline]
     fn from(code: TwirpErrorCode) -> Self {
         match code {
@@ -371,44 +371,44 @@ impl From<TwirpErrorCode> for tonic_012::Code {
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<TwirpError> for tonic_012::Status {
+#[cfg(feature = "tonic-013")]
+impl From<TwirpError> for tonic_013::Status {
     #[inline]
     fn from(error: TwirpError) -> Self {
         Self::new(error.code().into(), error.into_message())
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<tonic_012::Code> for TwirpErrorCode {
+#[cfg(feature = "tonic-013")]
+impl From<tonic_013::Code> for TwirpErrorCode {
     #[inline]
-    fn from(code: tonic_012::Code) -> TwirpErrorCode {
+    fn from(code: tonic_013::Code) -> TwirpErrorCode {
         match code {
-            tonic_012::Code::Cancelled => Self::Canceled,
-            tonic_012::Code::Unknown => Self::Unknown,
-            tonic_012::Code::InvalidArgument => Self::InvalidArgument,
-            tonic_012::Code::DeadlineExceeded => Self::DeadlineExceeded,
-            tonic_012::Code::NotFound => Self::NotFound,
-            tonic_012::Code::AlreadyExists => Self::AlreadyExists,
-            tonic_012::Code::PermissionDenied => Self::PermissionDenied,
-            tonic_012::Code::Unauthenticated => Self::Unauthenticated,
-            tonic_012::Code::ResourceExhausted => Self::ResourceExhausted,
-            tonic_012::Code::FailedPrecondition => Self::FailedPrecondition,
-            tonic_012::Code::Aborted => Self::Aborted,
-            tonic_012::Code::OutOfRange => Self::OutOfRange,
-            tonic_012::Code::Unimplemented => Self::Unimplemented,
-            tonic_012::Code::Internal => Self::Internal,
-            tonic_012::Code::Unavailable => Self::Unavailable,
-            tonic_012::Code::DataLoss => Self::Dataloss,
-            tonic_012::Code::Ok => Self::Unknown,
+            tonic_013::Code::Cancelled => Self::Canceled,
+            tonic_013::Code::Unknown => Self::Unknown,
+            tonic_013::Code::InvalidArgument => Self::InvalidArgument,
+            tonic_013::Code::DeadlineExceeded => Self::DeadlineExceeded,
+            tonic_013::Code::NotFound => Self::NotFound,
+            tonic_013::Code::AlreadyExists => Self::AlreadyExists,
+            tonic_013::Code::PermissionDenied => Self::PermissionDenied,
+            tonic_013::Code::Unauthenticated => Self::Unauthenticated,
+            tonic_013::Code::ResourceExhausted => Self::ResourceExhausted,
+            tonic_013::Code::FailedPrecondition => Self::FailedPrecondition,
+            tonic_013::Code::Aborted => Self::Aborted,
+            tonic_013::Code::OutOfRange => Self::OutOfRange,
+            tonic_013::Code::Unimplemented => Self::Unimplemented,
+            tonic_013::Code::Internal => Self::Internal,
+            tonic_013::Code::Unavailable => Self::Unavailable,
+            tonic_013::Code::DataLoss => Self::Dataloss,
+            tonic_013::Code::Ok => Self::Unknown,
         }
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<tonic_012::Status> for TwirpError {
+#[cfg(feature = "tonic-013")]
+impl From<tonic_013::Status> for TwirpError {
     #[inline]
-    fn from(status: tonic_012::Status) -> TwirpError {
+    fn from(status: tonic_013::Status) -> TwirpError {
         Self::wrap(status.code().into(), status.message().to_string(), status)
     }
 }
