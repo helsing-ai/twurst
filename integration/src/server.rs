@@ -2,7 +2,7 @@ use crate::proto::{test_request, test_response, IntegrationService, TestRequest,
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
-use axum::{async_trait, Router};
+use axum::Router;
 use eyre::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::pin::pin;
@@ -135,7 +135,6 @@ pub async fn serve_grpc() -> Result<Server> {
 
 pub struct ExtractBearerToken(pub String);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ExtractBearerToken
 where
     S: Send + Sync,
