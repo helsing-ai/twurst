@@ -336,10 +336,10 @@ impl<B: AsRef<[u8]>> From<http::Response<B>> for TwirpError {
     }
 }
 
-#[cfg(feature = "axum-07")]
-impl axum_core_04::response::IntoResponse for TwirpError {
+#[cfg(feature = "axum-08")]
+impl axum_core_05::response::IntoResponse for TwirpError {
     #[inline]
-    fn into_response(self) -> axum_core_04::response::Response {
+    fn into_response(self) -> axum_core_05::response::Response {
         self.into()
     }
 }

@@ -10,13 +10,13 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-axum-07 = ["dep:axum-core-04", "http"]
+axum-08 = ["dep:axum-core-05", "http"]
 http = ["dep:http", "dep:serde_json", "serde"]
 serde = ["dep:serde"]
 tonic-012 = ["dep:tonic-012"]
 
 [dependencies]
-axum-core-04 = { workspace = true, optional = true }
+axum-core-05 = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }

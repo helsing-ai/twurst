@@ -54,7 +54,7 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
     >(
         mut self,
         path: &str,
-        call: impl (Fn(S, I, RequestParts, RS) -> F) + Clone + Send + 'static,
+        call: impl (Fn(S, I, RequestParts, RS) -> F) + Clone + Send + Sync + 'static,
     ) -> Self {
         let service = self.service.clone();
         self.router = self.router.route(
@@ -215,7 +215,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + Sync + 'static,
         F: Future<Output = Result<O, TwirpError>> + Send + 'static,
     >(
         mut self,
@@ -238,7 +238,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_server_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + Sync + 'static,
         F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
         OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
     >(
@@ -262,7 +262,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_client_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + Sync + 'static,
         F: Future<Output = Result<O, TwirpError>> + Send + 'static,
     >(
         mut self,
@@ -285,7 +285,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + Sync + 'static,
         F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
         OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
     >(
