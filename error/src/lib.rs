@@ -375,6 +375,14 @@ impl From<TwirpErrorCode> for tonic_012::Code {
 impl From<TwirpError> for tonic_012::Status {
     #[inline]
     fn from(error: TwirpError) -> Self {
+        if let Some(source) = &error.source {
+            if let Some(status) = source.downcast_ref::<tonic_012::Status>() {
+                if status.code() == error.code().into() && status.message() == error.message() {
+                    // This is a status wrapped as a Twirp error, we reuse the status to keep the details
+                    return status.clone();
+                }
+            }
+        }
         Self::new(error.code().into(), error.into_message())
     }
 }
@@ -468,5 +476,37 @@ mod tests {
             TwirpError::permission_denied("Thou shall not pass")
         );
         Ok(())
+    }
+
+    #[cfg(feature = "tonic-012")]
+    #[test]
+    fn test_from_tonic_status_simple() {
+        assert_eq!(
+            TwirpError::from(tonic_012::Status::not_found("Not found")),
+            TwirpError::not_found("Not found")
+        );
+    }
+
+    #[cfg(feature = "tonic-012")]
+    #[test]
+    fn test_to_tonic_status_simple() {
+        let error = TwirpError::not_found("Not found");
+        let status = tonic_012::Status::from(error);
+        assert_eq!(status.code(), tonic_012::Code::NotFound);
+        assert_eq!(status.message(), "Not found");
+    }
+
+    #[cfg(feature = "tonic-012")]
+    #[test]
+    fn test_from_to_tonic_status_roundtrip() {
+        let status = tonic_012::Status::with_details(
+            tonic_012::Code::NotFound,
+            "Not found",
+            b"some_dummy_details".to_vec().into(),
+        );
+        let new_status = tonic_012::Status::from(TwirpError::from(status.clone()));
+        assert_eq!(status.code(), new_status.code());
+        assert_eq!(status.message(), new_status.message());
+        assert_eq!(status.details(), new_status.details());
     }
 }
