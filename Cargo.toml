@@ -25,7 +25,7 @@ regex = "1.8.1"
 reqwest-012 = { package = "reqwest", version = "0.12", default-features = false }
 serde = "1.0.217"
 serde_json = "1"
-tokio = "1.42"
+tokio = "1.43"
 tokio-stream = "0.1.16"
 tonic = { version = "0.12.3", default-features = false }
 tonic-012 = { package = "tonic", version = "0.12.3", default-features = false }
