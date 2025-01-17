@@ -23,6 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -41,6 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
         working-directory: error
@@ -58,6 +62,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: rustup override set 1.79.0 && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly update -Z direct-minimal-versions
@@ -69,6 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --all-features --no-deps
         env:
