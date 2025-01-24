@@ -118,8 +118,8 @@ impl TwirpError {
     }
 
     #[inline]
-    pub fn invalid_argument(argument: impl Into<String>, msg: impl Into<String>) -> Self {
-        Self::new(TwirpErrorCode::InvalidArgument, msg).with_meta("argument", argument)
+    pub fn invalid_argument(msg: impl Into<String>) -> Self {
+        Self::new(TwirpErrorCode::InvalidArgument, msg)
     }
 
     #[inline]
@@ -158,8 +158,8 @@ impl TwirpError {
     }
 
     #[inline]
-    pub fn required_argument(argument: &str) -> Self {
-        Self::invalid_argument(argument, format!("{argument} is required"))
+    pub fn required_argument(msg: impl Into<String>) -> Self {
+        Self::invalid_argument(msg)
     }
 
     #[inline]
@@ -429,10 +429,10 @@ mod tests {
 
     #[test]
     fn test_accessors() {
-        let error = TwirpError::invalid_argument("foo", "foo is wrong");
+        let error = TwirpError::invalid_argument("foo is wrong").with_meta("foo", "bar");
         assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
         assert_eq!(error.message(), "foo is wrong");
-        assert_eq!(error.meta("argument"), Some("foo"));
+        assert_eq!(error.meta("foo"), Some("bar"));
     }
 
     #[cfg(feature = "http")]
