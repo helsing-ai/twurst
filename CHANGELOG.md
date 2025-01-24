@@ -3,6 +3,8 @@
 ### Changed
 - axum upgraded from 0.7 to 0.8
 - feature `axum-07` as been removed in favor of feature `axum-08`
+- converting back a `TwirpError` to `tonic::Status` when it as been built from a `tonic::Status` keep the status details
+- `TwirpError::invalid_argument` now only takes a single error message argument
 
 ## [0.1.0] - 2024-12-26
 
