@@ -1,5 +1,13 @@
 [workspace]
-members = ["build", "client", "error", "server", "integration", "example/server", "example/client"]
+members = [
+    "build",
+    "client",
+    "error",
+    "server",
+    "integration",
+    "example/server",
+    "example/client",
+]
 resolver = "2"
 
 [workspace.package]
@@ -9,8 +17,8 @@ license = "Apache-2.0"
 rust-version = "1.79"
 
 [workspace.dependencies]
-axum = { version = "0.7.9", default-features = false }
-axum-core-04 = { package = "axum-core", version = "0.4.5" }
+axum = { version = "0.8", default-features = false }
+axum-core-05 = { package = "axum-core", version = "0.5.0" }
 eyre = "0.6.10"
 http = "1"
 http-body = "1"
@@ -31,8 +39,8 @@ tonic = { version = "0.12.3", default-features = false }
 tonic-012 = { package = "tonic", version = "0.12.3", default-features = false }
 tonic-build = "0.12.3"
 tower-service = "0.3.3"
-tower = "0.5.1"
+tower = "0.5.2"
 tower-http = "0.6.2"
 tracing = "0.1.35"
 trait-variant = "0.1.2"
-twurst-error = { path = "error", version = "0.1.0" }
+twurst-error = { path = "error", version = "0.2.0" }

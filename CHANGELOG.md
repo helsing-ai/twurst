@@ -1,3 +1,9 @@
+## [0.2.0] - 2025-01-24
+
+### Changed
+- axum upgraded from 0.7 to 0.8
+- feature `axum-07` as been removed in favor of feature `axum-08`
+
 ## [0.1.0] - 2024-12-26
 
 ### Added
