@@ -35,3 +35,7 @@ trait-variant.workspace = true
 prost.workspace = true
 tokio = { workspace = true, features = ["macros", "rt"] }
 tower-service.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
