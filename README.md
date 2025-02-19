@@ -5,11 +5,8 @@ on top of [`prost`](https://docs.rs/prost/), the [`tower`](https://docs.rs/tower
 It fully supports JSON and its server can also serve regular gRPC.
 
 <div align="center">
-
-<img src="docs/img/twurst.png" alt="Twurst logo" width="200px" height="auto" />
-
-# `Twurst`
-
+    <img src="docs/img/twurst.png" alt="Twurst logo" width="200px" height="auto" />
+    <h2>Twurst</h2>
 </div>
 
 ## What is Twirp?
