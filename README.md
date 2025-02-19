@@ -4,7 +4,11 @@ Twurst is an implementation of [Twirp v7](https://twitchtv.github.io/twirp/docs/
 on top of [`prost`](https://docs.rs/prost/), the [`tower`](https://docs.rs/tower) ecosystem and [`axum`](https://docs.rs/axum).
 It fully supports JSON and its server can also serve regular gRPC.
 
+<div align="center">
 <img src="docs/img/twurst.png" alt="Twurst logo" width="200px" height="auto">
+
+# `Twurst`
+</div>
 
 ## What is Twirp?
 
