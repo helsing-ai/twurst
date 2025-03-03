@@ -66,6 +66,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: rustup override set 1.79.0 && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
+      - run: mkdir .cargo && echo "resolver.incompatible-rust-versions = \"fallback\"" >> .cargo/config.toml # TODO: remove when targeting Rust 2024
       - run: cargo +nightly update -Z direct-minimal-versions
       - run: cargo test
       - run: cargo test --all-features
