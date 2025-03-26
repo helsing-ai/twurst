@@ -37,6 +37,7 @@ tokio = "1.44"
 tokio-stream = "0.1.16"
 tonic = { version = "0.12.3", default-features = false }
 tonic-012 = { package = "tonic", version = "0.12.3", default-features = false }
+tonic-013 = { package = "tonic", version = "0.13", default-features = false }
 tonic-build = "0.12.3"
 tower-service = "0.3.3"
 tower = "0.5.2"
