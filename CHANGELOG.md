@@ -1,3 +1,9 @@
+## [0.2.1] - 2025-03-26
+
+### Changed
+- Error: add feature `tonic-013` to support Tonic 0.13
+- Server: use Tonic 0.13 instead of Tonic 0.12
+
 ## [0.2.0] - 2025-01-24
 
 ### Changed
