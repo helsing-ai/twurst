@@ -31,7 +31,11 @@ jobs:
         working-directory: error
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: client
+      - run: cargo clippy --all-targets --features reqwest-012 -- -D warnings -D clippy::all
+        working-directory: client
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
+        working-directory: server
+      - run: cargo clippy --all-targets --features grpc -- -D warnings -D clippy::all
         working-directory: server
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: build
@@ -50,7 +54,11 @@ jobs:
         working-directory: error
       - run: cargo test
         working-directory: client
+      - run: cargo test --features reqwest-012
+        working-directory: client
       - run: cargo test
+        working-directory: server
+      - run: cargo test --features grpc
         working-directory: server
       - run: cargo test
         working-directory: build

@@ -24,5 +24,5 @@ pub async fn grpc_fallback(uri: Uri) -> impl IntoResponse {
         tonic::Code::NotFound,
         format!("{} is not a supported gRPC method", uri.path()),
     )
-    .into_http()
+    .into_http::<axum::body::Body>()
 }

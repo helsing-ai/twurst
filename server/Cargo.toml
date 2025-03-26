@@ -15,7 +15,7 @@ grpc = [
     "dep:tonic",
     "dep:tokio-stream",
     "dep:pin-project-lite",
-    "twurst-error/tonic-012",
+    "twurst-error/tonic-013",
 ]
 
 [dependencies]
@@ -26,7 +26,7 @@ pin-project-lite = { workspace = true, optional = true }
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 serde.workspace = true
 serde_json.workspace = true
-tonic = { workspace = true, optional = true, features = ["transport", "prost"] }
+tonic = { workspace = true, optional = true, features = ["prost"] }
 tokio-stream = { workspace = true, optional = true }
 tracing.workspace = true
 trait-variant.workspace = true
