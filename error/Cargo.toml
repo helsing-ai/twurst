@@ -10,6 +10,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+# Think to synchronize the README with this list
 axum-08 = ["dep:axum-core-05", "http"]
 http = ["dep:http", "dep:serde_json", "serde"]
 serde = ["dep:serde"]

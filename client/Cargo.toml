@@ -11,6 +11,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+# Think to synchronize the README with this list
 reqwest-012 = ["dep:reqwest-012"]
 
 [dependencies]
