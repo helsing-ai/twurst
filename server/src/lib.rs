@@ -1,5 +1,9 @@
 #![doc = include_str!("../README.md")]
-#![doc(test(attr(deny(warnings))))]
+#![doc(
+    test(attr(deny(warnings))),
+    html_favicon_url = "https://raw.githubusercontent.com/helsing-ai/twurst/main/docs/img/twurst.png",
+    html_logo_url = "https://raw.githubusercontent.com/helsing-ai/twurst/main/docs/img/twurst.png"
+)]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 #[doc(hidden)]
