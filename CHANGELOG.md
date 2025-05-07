@@ -1,3 +1,9 @@
+## [0.2.2] - 20205-05-07
+
+### Changed
+- prost-reflect: now supporting both 0.14 and 0.15
+- tokio: bump from 1.44.1 to 1.44.2
+
 ## [0.2.1] - 2025-03-26
 
 ### Changed
