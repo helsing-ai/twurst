@@ -1365,7 +1365,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "twurst-build"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "prost-build",
  "prost-reflect-build",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "twurst-client"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "http",
  "http-body",
@@ -1392,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "twurst-error"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum-core",
  "http",
@@ -1451,7 +1451,7 @@ dependencies = [
 
 [[package]]
 name = "twurst-server"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum",
  "http-body-util",
