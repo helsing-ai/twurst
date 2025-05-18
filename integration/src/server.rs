@@ -42,7 +42,7 @@ impl IntegrationService for IntegrationServiceServicer {
 
     async fn test_client_stream(
         &self,
-        mut request: impl Stream<Item = Result<TestRequest, TwirpError>> + Send,
+        request: impl Stream<Item = Result<TestRequest, TwirpError>> + Send,
         ExtractBearerToken(bearer_token): ExtractBearerToken,
     ) -> Result<TestResponse, TwirpError> {
         if bearer_token != "password" {
