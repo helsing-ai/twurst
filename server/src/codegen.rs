@@ -227,7 +227,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
             path,
             post(move |request: Request| async move {
                 let method = GrpcService { service, callback };
-                let codec = tonic::codec::ProstCodec::default();
+                let codec = tonic_prost::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.unary(method, request).await
             }),
@@ -251,7 +251,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
             path,
             post(move |request: Request| async move {
                 let method = GrpcService { service, callback };
-                let codec = tonic::codec::ProstCodec::default();
+                let codec = tonic_prost::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.server_streaming(method, request).await
             }),
@@ -274,7 +274,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
             path,
             post(move |request: Request| async move {
                 let method = GrpcService { service, callback };
-                let codec = tonic::codec::ProstCodec::default();
+                let codec = tonic_prost::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.client_streaming(method, request).await
             }),
@@ -298,7 +298,7 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
             path,
             post(move |request: Request| async move {
                 let method = GrpcService { service, callback };
-                let codec = tonic::codec::ProstCodec::default();
+                let codec = tonic_prost::ProstCodec::default();
                 let mut grpc = tonic::server::Grpc::new(codec);
                 grpc.streaming(method, request).await
             }),
@@ -477,9 +477,9 @@ mod tests {
     #[cfg(feature = "grpc")]
     use tonic::client::Grpc;
     #[cfg(feature = "grpc")]
-    use tonic::codec::ProstCodec;
-    #[cfg(feature = "grpc")]
     use tonic::Code;
+    #[cfg(feature = "grpc")]
+    use tonic_prost::ProstCodec;
     use tower_service::Service;
 
     const FILE_DESCRIPTOR_SET_BYTES: &[u8] = &[

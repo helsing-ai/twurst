@@ -3,7 +3,7 @@ name = "twurst-error"
 description = "Twirp error struct"
 repository = "https://github.com/helsing-ai/twurst"
 documentation = "https://docs.rs/twurst-error"
-version = "0.2.2"
+version = "0.3.0-dev"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,16 +14,14 @@ rust-version.workspace = true
 axum-08 = ["dep:axum-core-05", "http"]
 http = ["dep:http", "dep:serde_json", "serde"]
 serde = ["dep:serde"]
-tonic-012 = ["dep:tonic-012"]
-tonic-013 = ["dep:tonic-013"]
+tonic-014 = ["dep:tonic-014"]
 
 [dependencies]
 axum-core-05 = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_json = { workspace = true, optional = true }
-tonic-012 = { workspace = true, optional = true }
-tonic-013 = { workspace = true, optional = true }
+tonic-014 = { workspace = true, optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

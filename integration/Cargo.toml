@@ -17,9 +17,10 @@ prost-reflect.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 tokio-stream.workspace = true
 tonic = { workspace = true, features = ["default"] }
+tonic-prost.workspace = true
 tower.workspace = true
 tower-http = { workspace = true, features = ["auth", "cors"] }
 
 [build-dependencies]
 twurst-build.path = "../build"
-tonic-build.workspace = true
+tonic-prost-build.workspace = true
