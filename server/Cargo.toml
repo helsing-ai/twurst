@@ -4,7 +4,7 @@ description = "Twirp server related code"
 keywords = ["Twirp"]
 repository = "https://github.com/helsing-ai/twurst"
 documentation = "https://docs.rs/twurst-server"
-version = "0.2.2"
+version = "0.3.0-dev"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,9 +13,10 @@ rust-version.workspace = true
 [features]
 grpc = [
     "dep:tonic",
+    "dep:tonic-prost",
     "dep:tokio-stream",
     "dep:pin-project-lite",
-    "twurst-error/tonic-013",
+    "twurst-error/tonic-014",
 ]
 
 [dependencies]
@@ -26,7 +27,8 @@ pin-project-lite = { workspace = true, optional = true }
 prost-reflect = { workspace = true, features = ["derive", "serde"] }
 serde.workspace = true
 serde_json.workspace = true
-tonic = { workspace = true, optional = true, features = ["prost"] }
+tonic = { workspace = true, optional = true }
+tonic-prost = { workspace = true, optional = true }
 tokio-stream = { workspace = true, optional = true }
 tracing.workspace = true
 trait-variant.workspace = true

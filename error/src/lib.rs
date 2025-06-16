@@ -348,8 +348,8 @@ impl axum_core_05::response::IntoResponse for TwirpError {
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<TwirpErrorCode> for tonic_012::Code {
+#[cfg(feature = "tonic-014")]
+impl From<TwirpErrorCode> for tonic_014::Code {
     #[inline]
     fn from(code: TwirpErrorCode) -> Self {
         match code {
@@ -375,12 +375,12 @@ impl From<TwirpErrorCode> for tonic_012::Code {
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<TwirpError> for tonic_012::Status {
+#[cfg(feature = "tonic-014")]
+impl From<TwirpError> for tonic_014::Status {
     #[inline]
     fn from(error: TwirpError) -> Self {
         if let Some(source) = &error.source {
-            if let Some(status) = source.downcast_ref::<tonic_012::Status>() {
+            if let Some(status) = source.downcast_ref::<tonic_014::Status>() {
                 if status.code() == error.code().into() && status.message() == error.message() {
                     // This is a status wrapped as a Twirp error, we reuse the status to keep the details
                     return status.clone();
@@ -391,113 +391,36 @@ impl From<TwirpError> for tonic_012::Status {
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<tonic_012::Code> for TwirpErrorCode {
+#[cfg(feature = "tonic-014")]
+impl From<tonic_014::Code> for TwirpErrorCode {
     #[inline]
-    fn from(code: tonic_012::Code) -> TwirpErrorCode {
+    fn from(code: tonic_014::Code) -> TwirpErrorCode {
         match code {
-            tonic_012::Code::Cancelled => Self::Canceled,
-            tonic_012::Code::Unknown => Self::Unknown,
-            tonic_012::Code::InvalidArgument => Self::InvalidArgument,
-            tonic_012::Code::DeadlineExceeded => Self::DeadlineExceeded,
-            tonic_012::Code::NotFound => Self::NotFound,
-            tonic_012::Code::AlreadyExists => Self::AlreadyExists,
-            tonic_012::Code::PermissionDenied => Self::PermissionDenied,
-            tonic_012::Code::Unauthenticated => Self::Unauthenticated,
-            tonic_012::Code::ResourceExhausted => Self::ResourceExhausted,
-            tonic_012::Code::FailedPrecondition => Self::FailedPrecondition,
-            tonic_012::Code::Aborted => Self::Aborted,
-            tonic_012::Code::OutOfRange => Self::OutOfRange,
-            tonic_012::Code::Unimplemented => Self::Unimplemented,
-            tonic_012::Code::Internal => Self::Internal,
-            tonic_012::Code::Unavailable => Self::Unavailable,
-            tonic_012::Code::DataLoss => Self::Dataloss,
-            tonic_012::Code::Ok => Self::Unknown,
+            tonic_014::Code::Cancelled => Self::Canceled,
+            tonic_014::Code::Unknown => Self::Unknown,
+            tonic_014::Code::InvalidArgument => Self::InvalidArgument,
+            tonic_014::Code::DeadlineExceeded => Self::DeadlineExceeded,
+            tonic_014::Code::NotFound => Self::NotFound,
+            tonic_014::Code::AlreadyExists => Self::AlreadyExists,
+            tonic_014::Code::PermissionDenied => Self::PermissionDenied,
+            tonic_014::Code::Unauthenticated => Self::Unauthenticated,
+            tonic_014::Code::ResourceExhausted => Self::ResourceExhausted,
+            tonic_014::Code::FailedPrecondition => Self::FailedPrecondition,
+            tonic_014::Code::Aborted => Self::Aborted,
+            tonic_014::Code::OutOfRange => Self::OutOfRange,
+            tonic_014::Code::Unimplemented => Self::Unimplemented,
+            tonic_014::Code::Internal => Self::Internal,
+            tonic_014::Code::Unavailable => Self::Unavailable,
+            tonic_014::Code::DataLoss => Self::Dataloss,
+            tonic_014::Code::Ok => Self::Unknown,
         }
     }
 }
 
-#[cfg(feature = "tonic-012")]
-impl From<tonic_012::Status> for TwirpError {
+#[cfg(feature = "tonic-014")]
+impl From<tonic_014::Status> for TwirpError {
     #[inline]
-    fn from(status: tonic_012::Status) -> TwirpError {
-        Self::wrap(status.code().into(), status.message().to_string(), status)
-    }
-}
-
-#[cfg(feature = "tonic-013")]
-impl From<TwirpErrorCode> for tonic_013::Code {
-    #[inline]
-    fn from(code: TwirpErrorCode) -> Self {
-        match code {
-            TwirpErrorCode::Canceled => Self::Cancelled,
-            TwirpErrorCode::Unknown => Self::Unknown,
-            TwirpErrorCode::InvalidArgument => Self::InvalidArgument,
-            TwirpErrorCode::Malformed => Self::InvalidArgument,
-            TwirpErrorCode::DeadlineExceeded => Self::DeadlineExceeded,
-            TwirpErrorCode::NotFound => Self::NotFound,
-            TwirpErrorCode::BadRoute => Self::NotFound,
-            TwirpErrorCode::AlreadyExists => Self::AlreadyExists,
-            TwirpErrorCode::PermissionDenied => Self::PermissionDenied,
-            TwirpErrorCode::Unauthenticated => Self::Unauthenticated,
-            TwirpErrorCode::ResourceExhausted => Self::ResourceExhausted,
-            TwirpErrorCode::FailedPrecondition => Self::FailedPrecondition,
-            TwirpErrorCode::Aborted => Self::Aborted,
-            TwirpErrorCode::OutOfRange => Self::OutOfRange,
-            TwirpErrorCode::Unimplemented => Self::Unimplemented,
-            TwirpErrorCode::Internal => Self::Internal,
-            TwirpErrorCode::Unavailable => Self::Unavailable,
-            TwirpErrorCode::Dataloss => Self::DataLoss,
-        }
-    }
-}
-
-#[cfg(feature = "tonic-013")]
-impl From<TwirpError> for tonic_013::Status {
-    #[inline]
-    fn from(error: TwirpError) -> Self {
-        if let Some(source) = &error.source {
-            if let Some(status) = source.downcast_ref::<tonic_013::Status>() {
-                if status.code() == error.code().into() && status.message() == error.message() {
-                    // This is a status wrapped as a Twirp error, we reuse the status to keep the details
-                    return status.clone();
-                }
-            }
-        }
-        Self::new(error.code().into(), error.into_message())
-    }
-}
-
-#[cfg(feature = "tonic-013")]
-impl From<tonic_013::Code> for TwirpErrorCode {
-    #[inline]
-    fn from(code: tonic_013::Code) -> TwirpErrorCode {
-        match code {
-            tonic_013::Code::Cancelled => Self::Canceled,
-            tonic_013::Code::Unknown => Self::Unknown,
-            tonic_013::Code::InvalidArgument => Self::InvalidArgument,
-            tonic_013::Code::DeadlineExceeded => Self::DeadlineExceeded,
-            tonic_013::Code::NotFound => Self::NotFound,
-            tonic_013::Code::AlreadyExists => Self::AlreadyExists,
-            tonic_013::Code::PermissionDenied => Self::PermissionDenied,
-            tonic_013::Code::Unauthenticated => Self::Unauthenticated,
-            tonic_013::Code::ResourceExhausted => Self::ResourceExhausted,
-            tonic_013::Code::FailedPrecondition => Self::FailedPrecondition,
-            tonic_013::Code::Aborted => Self::Aborted,
-            tonic_013::Code::OutOfRange => Self::OutOfRange,
-            tonic_013::Code::Unimplemented => Self::Unimplemented,
-            tonic_013::Code::Internal => Self::Internal,
-            tonic_013::Code::Unavailable => Self::Unavailable,
-            tonic_013::Code::DataLoss => Self::Dataloss,
-            tonic_013::Code::Ok => Self::Unknown,
-        }
-    }
-}
-
-#[cfg(feature = "tonic-013")]
-impl From<tonic_013::Status> for TwirpError {
-    #[inline]
-    fn from(status: tonic_013::Status) -> TwirpError {
+    fn from(status: tonic_014::Status) -> TwirpError {
         Self::wrap(status.code().into(), status.message().to_string(), status)
     }
 }
@@ -559,65 +482,33 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "tonic-012")]
+    #[cfg(feature = "tonic-014")]
     #[test]
-    fn test_from_tonic_012_status_simple() {
+    fn test_from_tonic_014_status_simple() {
         assert_eq!(
-            TwirpError::from(tonic_012::Status::not_found("Not found")),
+            TwirpError::from(tonic_014::Status::not_found("Not found")),
             TwirpError::not_found("Not found")
         );
     }
 
-    #[cfg(feature = "tonic-012")]
+    #[cfg(feature = "tonic-014")]
     #[test]
-    fn test_to_tonic_012_status_simple() {
+    fn test_to_tonic_014_status_simple() {
         let error = TwirpError::not_found("Not found");
-        let status = tonic_012::Status::from(error);
-        assert_eq!(status.code(), tonic_012::Code::NotFound);
+        let status = tonic_014::Status::from(error);
+        assert_eq!(status.code(), tonic_014::Code::NotFound);
         assert_eq!(status.message(), "Not found");
     }
 
-    #[cfg(feature = "tonic-012")]
+    #[cfg(feature = "tonic-014")]
     #[test]
-    fn test_from_to_tonic_012_status_roundtrip() {
-        let status = tonic_012::Status::with_details(
-            tonic_012::Code::NotFound,
+    fn test_from_to_tonic_014_status_roundtrip() {
+        let status = tonic_014::Status::with_details(
+            tonic_014::Code::NotFound,
             "Not found",
             b"some_dummy_details".to_vec().into(),
         );
-        let new_status = tonic_012::Status::from(TwirpError::from(status.clone()));
-        assert_eq!(status.code(), new_status.code());
-        assert_eq!(status.message(), new_status.message());
-        assert_eq!(status.details(), new_status.details());
-    }
-
-    #[cfg(feature = "tonic-013")]
-    #[test]
-    fn test_from_tonic_013_status_simple() {
-        assert_eq!(
-            TwirpError::from(tonic_013::Status::not_found("Not found")),
-            TwirpError::not_found("Not found")
-        );
-    }
-
-    #[cfg(feature = "tonic-013")]
-    #[test]
-    fn test_to_tonic_013_status_simple() {
-        let error = TwirpError::not_found("Not found");
-        let status = tonic_013::Status::from(error);
-        assert_eq!(status.code(), tonic_013::Code::NotFound);
-        assert_eq!(status.message(), "Not found");
-    }
-
-    #[cfg(feature = "tonic-013")]
-    #[test]
-    fn test_from_to_tonic_013_status_roundtrip() {
-        let status = tonic_013::Status::with_details(
-            tonic_013::Code::NotFound,
-            "Not found",
-            b"some_dummy_details".to_vec().into(),
-        );
-        let new_status = tonic_013::Status::from(TwirpError::from(status.clone()));
+        let new_status = tonic_014::Status::from(TwirpError::from(status.clone()));
         assert_eq!(status.code(), new_status.code());
         assert_eq!(status.message(), new_status.message());
         assert_eq!(status.details(), new_status.details());

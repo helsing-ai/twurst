@@ -12,7 +12,7 @@ fn main() -> std::io::Result<()> {
     // Custom out dir to not override Twirp
     let dir = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("tonic");
     fs::create_dir_all(&dir)?;
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .out_dir(dir)
         .compile_protos(&["integration.proto"], &["."])
 }
