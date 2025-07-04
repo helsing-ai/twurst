@@ -172,7 +172,7 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
     ) -> Result<Request<TwirpRequestBody>, TwirpError> {
         let mut request_builder = Request::builder().method(Method::POST);
         request_builder = if let Some(base_url) = &self.base_url {
-            request_builder.uri(format!("{}{}", base_url, path))
+            request_builder.uri(format!("{base_url}{path}"))
         } else {
             request_builder.uri(path)
         };
