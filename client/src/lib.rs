@@ -15,9 +15,9 @@ use prost_reflect::{DynamicMessage, ReflectMessage};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::error::Error;
-use std::future::poll_fn;
 #[cfg(feature = "reqwest-012")]
 use std::future::Future;
+use std::future::poll_fn;
 use std::mem::take;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -264,17 +264,17 @@ pub trait TwirpHttpService: 'static {
 }
 
 impl<
-        S: Service<
-                Request<TwirpRequestBody>,
-                Error: Error + Send + Sync + 'static,
-                Response = Response<RespBody>,
-                Future: Send,
-            > + Clone
-            + Send
-            + Sync
-            + 'static,
-        RespBody: Body<Error: Error + Send + Sync + 'static>,
-    > TwirpHttpService for S
+    S: Service<
+            Request<TwirpRequestBody>,
+            Error: Error + Send + Sync + 'static,
+            Response = Response<RespBody>,
+            Future: Send,
+        > + Clone
+        + Send
+        + Sync
+        + 'static,
+    RespBody: Body<Error: Error + Send + Sync + 'static>,
+> TwirpHttpService for S
 {
     type ResponseBody = RespBody;
     type Error = S::Error;
@@ -680,7 +680,9 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             response_error,
-            TwirpError::malformed("Bad response binary protobuf encoding: failed to decode Protobuf message: buffer underflow")
+            TwirpError::malformed(
+                "Bad response binary protobuf encoding: failed to decode Protobuf message: buffer underflow"
+            )
         );
         Ok(())
     }

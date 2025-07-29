@@ -1,6 +1,6 @@
 use crate::proto::integration_service_client::IntegrationServiceClient;
 use crate::proto::test_nested::NestedMessage;
-use crate::proto::{test_request, test_response, TestNested, TestRequest, TestResponse};
+use crate::proto::{TestNested, TestRequest, TestResponse, test_request, test_response};
 use eyre::Result;
 use prost_types::Value;
 use std::time::{Duration, UNIX_EPOCH};

@@ -1,7 +1,7 @@
 use crate::proto::{
-    self, test_request, test_response, Int, IntegrationServiceClient, TestRequest, TestResponse,
+    self, Int, IntegrationServiceClient, TestRequest, TestResponse, test_request, test_response,
 };
-use eyre::{bail, Context, OptionExt, Report, Result};
+use eyre::{Context, OptionExt, Report, Result, bail};
 use prost_types::value::Kind;
 use prost_types::{Any, Value};
 use std::time::{Duration, SystemTime};

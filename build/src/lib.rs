@@ -316,7 +316,11 @@ impl TwirpServiceGenerator {
                 writeln!(buf, ") -> Result<")?;
                 if method.server_streaming {
                     // TODO: move back to `impl` when we will be able to use precise capturing to not capture &self
-                    writeln!(buf, "Box<dyn ::twurst_server::codegen::Stream<Item=Result<{}, ::twurst_server::TwirpError>> + Send>", method.output_type)?;
+                    writeln!(
+                        buf,
+                        "Box<dyn ::twurst_server::codegen::Stream<Item=Result<{}, ::twurst_server::TwirpError>> + Send>",
+                        method.output_type
+                    )?;
                 } else {
                     writeln!(buf, "{}", method.output_type)?;
                 }
@@ -341,10 +345,10 @@ impl TwirpServiceGenerator {
                     continue;
                 }
                 write!(
-                        buf,
-                        "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
-                        service.package, service.proto_name, method.proto_name, method.input_type,
-                    )?;
+                    buf,
+                    "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
+                    service.package, service.proto_name, method.proto_name, method.input_type,
+                )?;
                 if self.request_extractors.is_empty() {
                     write!(buf, ", _: ::twurst_server::codegen::RequestParts, _: S")?;
                 } else {
@@ -358,9 +362,9 @@ impl TwirpServiceGenerator {
                 write!(buf, "                    service.{}(request", method.name)?;
                 for (_name, type_name) in &self.request_extractors {
                     write!(
-                            buf,
-                            ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
-                        )?;
+                        buf,
+                        ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
+                    )?;
                 }
                 writeln!(buf, ").await")?;
                 writeln!(buf, "                }}")?;
@@ -388,8 +392,8 @@ impl TwirpServiceGenerator {
                     };
                     write!(
                         buf,
-                        "            .{}(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: ",method_name,
-                        service.package, service.proto_name, method.proto_name,
+                        "            .{}(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: ",
+                        method_name, service.package, service.proto_name, method.proto_name,
                     )?;
                     if method.client_streaming {
                         write!(

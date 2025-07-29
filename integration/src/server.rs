@@ -1,13 +1,13 @@
-use crate::proto::{test_request, test_response, IntegrationService, TestRequest, TestResponse};
+use crate::proto::{IntegrationService, TestRequest, TestResponse, test_request, test_response};
+use axum::Router;
 use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
-use axum::Router;
 use eyre::Result;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::pin::pin;
 use tokio::net::TcpListener;
-use tokio::task::{spawn, JoinHandle};
+use tokio::task::{JoinHandle, spawn};
 use tokio_stream::{Stream, StreamExt};
 use tower_http::cors::{Any, CorsLayer};
 use twurst_server::TwirpError;
