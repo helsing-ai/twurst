@@ -1,17 +1,17 @@
 use crate::TwirpError;
+use axum::RequestExt;
+pub use axum::Router;
 use axum::body::Body;
 pub use axum::extract::FromRequestParts;
 use axum::extract::{Request, State};
-use axum::http::header::CONTENT_TYPE;
-pub use axum::http::request::Parts as RequestParts;
 #[cfg(feature = "grpc")]
 use axum::http::Method;
+use axum::http::header::CONTENT_TYPE;
+pub use axum::http::request::Parts as RequestParts;
 use axum::http::{HeaderMap, HeaderValue};
 pub use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::post;
-use axum::RequestExt;
-pub use axum::Router;
 use http_body_util::BodyExt;
 #[cfg(feature = "grpc")]
 use pin_project_lite::pin_project;
@@ -319,12 +319,12 @@ struct GrpcService<S, C> {
 
 #[cfg(feature = "grpc")]
 impl<
-        S: Clone + Send + Sync + 'static,
-        I: ReflectMessage + Default + 'static,
-        O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-    > tonic::server::UnaryService<I> for GrpcService<S, C>
+    S: Clone + Send + Sync + 'static,
+    I: ReflectMessage + Default + 'static,
+    O: ReflectMessage + 'static,
+    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+    F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+> tonic::server::UnaryService<I> for GrpcService<S, C>
 {
     type Response = O;
     type Future = TonicResponseFuture<O>;
@@ -338,13 +338,13 @@ impl<
 
 #[cfg(feature = "grpc")]
 impl<
-        S: Clone + Send + Sync + 'static,
-        I: ReflectMessage + Default + 'static,
-        O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
-        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
-    > tonic::server::ServerStreamingService<I> for GrpcService<S, C>
+    S: Clone + Send + Sync + 'static,
+    I: ReflectMessage + Default + 'static,
+    O: ReflectMessage + 'static,
+    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
+    F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+    OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+> tonic::server::ServerStreamingService<I> for GrpcService<S, C>
 {
     type Response = O;
     type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
@@ -363,12 +363,12 @@ impl<
 
 #[cfg(feature = "grpc")]
 impl<
-        S: Clone + Send + Sync + 'static,
-        I: ReflectMessage + Default + 'static,
-        O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
-        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-    > tonic::server::ClientStreamingService<I> for GrpcService<S, C>
+    S: Clone + Send + Sync + 'static,
+    I: ReflectMessage + Default + 'static,
+    O: ReflectMessage + 'static,
+    C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+    F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+> tonic::server::ClientStreamingService<I> for GrpcService<S, C>
 {
     type Response = O;
     type Future = TonicResponseFuture<Self::Response>;
@@ -383,13 +383,13 @@ impl<
 
 #[cfg(feature = "grpc")]
 impl<
-        S: Clone + Send + Sync + 'static,
-        I: ReflectMessage + Default + 'static,
-        O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
-        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
-        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
-    > tonic::server::StreamingService<I> for GrpcService<S, C>
+    S: Clone + Send + Sync + 'static,
+    I: ReflectMessage + Default + 'static,
+    O: ReflectMessage + 'static,
+    C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
+    F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+    OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+> tonic::server::StreamingService<I> for GrpcService<S, C>
 {
     type Response = O;
     type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
@@ -454,7 +454,9 @@ pub async fn twirp_error_from_response(response: impl IntoResponse) -> TwirpErro
     let body = match body.collect().await {
         Ok(body) => body.to_bytes(),
         Err(e) => {
-            error!("Failed to load the body of the HTTP payload when building a TwirpError from a generic HTTP response: {e}");
+            error!(
+                "Failed to load the body of the HTTP payload when building a TwirpError from a generic HTTP response: {e}"
+            );
             return TwirpError::wrap(
                 TwirpErrorCode::Internal,
                 "Failed to map an internal error",
@@ -475,9 +477,9 @@ mod tests {
     use http_body_util::BodyExt;
     use prost::Message;
     #[cfg(feature = "grpc")]
-    use tonic::client::Grpc;
-    #[cfg(feature = "grpc")]
     use tonic::Code;
+    #[cfg(feature = "grpc")]
+    use tonic::client::Grpc;
     #[cfg(feature = "grpc")]
     use tonic_prost::ProstCodec;
     use tower_service::Service;

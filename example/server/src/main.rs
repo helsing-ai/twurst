@@ -1,11 +1,11 @@
 use crate::proto::{ExampleService, TestRequest, TestResponse};
-use axum::http::HeaderMap;
 use axum::Router;
+use axum::http::HeaderMap;
 use std::error::Error;
 use tokio::join;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
-use twurst_server::{grpc_fallback, twirp_fallback, TwirpError};
+use twurst_server::{TwirpError, grpc_fallback, twirp_fallback};
 
 pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/example.rs"));
