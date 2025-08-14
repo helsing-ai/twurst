@@ -1,8 +1,16 @@
-## [0.2.2] - 20205-05-07
+## [0.3.0] - 2025-08-14
 
 ### Changed
-- prost-reflect: now supporting both 0.14 and 0.15
-- tokio: bump from 1.44.1 to 1.44.2
+- upgrade to `prost` 0.14, `prost-reflect` 0.16 and `tonic` 0.14
+- drop `twurst-error` features `tonic-012` and `tonic-013` in favor of `tonic-014`
+- add dependency on `tonic-prost` (required now to use Tonic with Prost). It is needed explicitly when using `twurst-server` with the `grpc` feature
+- bump MSRV to 1.86
+
+## [0.2.2] - 2025-05-07
+
+### Changed
+- `prost-reflect`: now supporting both 0.14 and 0.15
+- `tokio`: bump from 1.44.1 to 1.44.2
 
 ## [0.2.1] - 2025-03-26
 

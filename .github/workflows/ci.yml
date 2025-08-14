@@ -72,7 +72,7 @@ jobs:
       - uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: rustup override set 1.86.0 && rustup toolchain install nightly
+      - run: rustup override set 1.85.0 && rustup toolchain install nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo +nightly update -Z direct-minimal-versions
       - run: cargo test

@@ -14,7 +14,7 @@ resolver = "2"
 authors = ["Thomas Pellissier-Tanon <thomas.pellissier-tanon@helsing.ai>"]
 edition = "2024"
 license = "Apache-2.0"
-rust-version = "1.86"
+rust-version = "1.85"
 
 [workspace.dependencies]
 axum = { version = "0.8", default-features = false }
@@ -44,4 +44,4 @@ tower = "0.5.2"
 tower-http = "0.6.6"
 tracing = "0.1.35"
 trait-variant = "0.1.2"
-twurst-error = { path = "error", version = "0.3.0-dev" }
+twurst-error = { path = "error", version = "0.3.0" }
