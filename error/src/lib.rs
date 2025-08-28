@@ -19,11 +19,11 @@ use std::sync::Arc;
 /// - A set of "`meta`" key-value pairs as strings holding arbitrary metadata describing the error.
 ///
 /// ```
-/// # use twurst_error::{TwirpError, TwirpErrorCode};
-/// let error = TwirpError::not_found("Object foo not found").with_meta("id", "foo");
+/// # use twurst_error::{TwirpError, TwirpErrorCode, TwirpErrorMetaValue};
+/// let error = TwirpError::not_found("Object foo not found").with_meta("id", TwirpErrorMetaValue::new_str("foo"));
 /// assert_eq!(error.code(), TwirpErrorCode::NotFound);
 /// assert_eq!(error.message(), "Object foo not found");
-/// assert_eq!(error.meta("id"), Some("foo"));
+/// assert_eq!(error.meta("id"), Some(&TwirpErrorMetaValue::new_str("foo")));
 /// ```
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -37,9 +37,53 @@ pub struct TwirpError {
         feature = "serde",
         serde(default, skip_serializing_if = "HashMap::is_empty")
     )]
-    meta: HashMap<String, String>,
+    meta: HashMap<String, TwirpErrorMetaValue>,
     #[cfg_attr(feature = "serde", serde(default, skip))]
     source: Option<Arc<dyn Error + Send + Sync>>,
+}
+
+// TODO(mc): Encoding on this?
+#[cfg(feature = "serde")]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum TwirpErrorMetaValue {
+    Number(u64),
+    Double(f64),
+    String(String),
+    Boolean(bool),
+}
+
+impl TwirpErrorMetaValue {
+    pub fn new_str(s: impl Into<String>) -> TwirpErrorMetaValue {
+        TwirpErrorMetaValue::String(s.into())
+    }
+
+    pub fn as_u64(&self) -> Option<u64> {
+        match self {
+            TwirpErrorMetaValue::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            TwirpErrorMetaValue::Double(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            TwirpErrorMetaValue::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            TwirpErrorMetaValue::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
 }
 
 impl TwirpError {
@@ -60,14 +104,14 @@ impl TwirpError {
 
     /// Get an associated metadata
     #[inline]
-    pub fn meta(&self, key: &str) -> Option<&str> {
-        self.meta.get(key).map(|s| s.as_str())
+    pub fn meta(&self, key: &str) -> Option<&TwirpErrorMetaValue> {
+        self.meta.get(key)
     }
 
     /// Get all associated metadata
     #[inline]
-    pub fn meta_iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.meta.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    pub fn meta_iter(&self) -> impl Iterator<Item = (&str, &TwirpErrorMetaValue)> {
+        self.meta.iter().map(|(k, v)| (k.as_str(), v))
     }
 
     #[inline]
@@ -96,8 +140,8 @@ impl TwirpError {
 
     /// Set an associated metadata
     #[inline]
-    pub fn with_meta(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.meta.insert(key.into(), value.into());
+    pub fn with_meta(mut self, key: impl Into<String>, value: TwirpErrorMetaValue) -> Self {
+        self.meta.insert(key.into(), value);
         self
     }
 
@@ -433,25 +477,113 @@ mod tests {
 
     #[test]
     fn test_accessors() {
-        let error = TwirpError::invalid_argument("foo is wrong").with_meta("foo", "bar");
+        let error = TwirpError::invalid_argument("foo is wrong")
+            .with_meta("foo", TwirpErrorMetaValue::new_str("bar"));
         assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
         assert_eq!(error.message(), "foo is wrong");
-        assert_eq!(error.meta("foo"), Some("bar"));
+        assert_eq!(
+            error.meta("foo"),
+            Some(&TwirpErrorMetaValue::new_str("bar"))
+        );
+    }
+
+    #[test]
+    fn test_number_meta() {
+        let expected_number = TwirpErrorMetaValue::Number(7);
+
+        let error = TwirpError::invalid_argument("foo is wrong")
+            .with_meta("number", expected_number.clone());
+
+        assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
+        assert_eq!(error.message(), "foo is wrong");
+
+        let value = error.meta("number");
+        assert_eq!(value, Some(&expected_number));
+
+        let value = value.expect("meta should've contained a value");
+        assert_eq!(value.as_u64(), Some(7));
+        assert_eq!(value.as_f64(), None);
+        assert_eq!(value.as_str(), None);
+        assert_eq!(value.as_bool(), None);
+    }
+
+    #[test]
+    fn test_double_meta() {
+        let expected_double = TwirpErrorMetaValue::Double(14.0);
+
+        let error = TwirpError::invalid_argument("foo is wrong")
+            .with_meta("double", expected_double.clone());
+
+        assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
+        assert_eq!(error.message(), "foo is wrong");
+
+        let value = error.meta("double");
+        assert_eq!(value, Some(&expected_double));
+
+        let value = value.expect("meta should've contained a value");
+        assert_eq!(value.as_u64(), None);
+        assert_eq!(value.as_f64(), Some(14.0));
+        assert_eq!(value.as_str(), None);
+        assert_eq!(value.as_bool(), None);
+    }
+
+    #[test]
+    fn test_string_meta() {
+        let expected_string = TwirpErrorMetaValue::new_str("bar");
+
+        let error = TwirpError::invalid_argument("foo is wrong")
+            .with_meta("string", expected_string.clone());
+
+        assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
+        assert_eq!(error.message(), "foo is wrong");
+
+        let value = error.meta("string");
+        assert_eq!(value, Some(&expected_string));
+
+        let value = value.expect("meta should've contained a value");
+        assert_eq!(value.as_u64(), None);
+        assert_eq!(value.as_f64(), None);
+        assert_eq!(value.as_str(), Some("bar"));
+        assert_eq!(value.as_bool(), None);
+    }
+
+    #[test]
+    fn test_bool_meta() {
+        let expected_bool = TwirpErrorMetaValue::Boolean(true);
+
+        let error = TwirpError::invalid_argument("foo is wrong")
+            .with_meta("boolean", expected_bool.clone());
+
+        assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
+        assert_eq!(error.message(), "foo is wrong");
+
+        let value = error.meta("boolean");
+        assert_eq!(value, Some(&expected_bool));
+
+        let value = value.expect("meta should've contained a value");
+        assert_eq!(value.as_u64(), None);
+        assert_eq!(value.as_f64(), None);
+        assert_eq!(value.as_str(), None);
+        assert_eq!(value.as_bool(), Some(true));
     }
 
     #[cfg(feature = "http")]
     #[test]
     fn test_to_response() -> Result<(), Box<dyn Error>> {
-        let object =
-            TwirpError::permission_denied("Thou shall not pass").with_meta("target", "Balrog");
+        let object = TwirpError::permission_denied("Thou shall not pass")
+            .with_meta("target", TwirpErrorMetaValue::new_str("Balrog"));
         let response = http::Response::<Vec<u8>>::from(object);
         assert_eq!(response.status(), http::StatusCode::FORBIDDEN);
         assert_eq!(
             response.headers().get(http::header::CONTENT_TYPE),
             Some(&http::HeaderValue::from_static("application/json"))
         );
+        println!(
+            "{:?}",
+            String::from_utf8(response.clone().into_body()).unwrap()
+        );
         assert_eq!(
-            response.into_body(), b"{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":\"Balrog\"}}"
+            response.into_body(), b"{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":{\"String\":\"Balrog\"}}}"
         );
         Ok(())
     }
@@ -461,10 +593,11 @@ mod tests {
     fn test_from_valid_response() -> Result<(), Box<dyn Error>> {
         let response = http::Response::builder()
             .header(http::header::CONTENT_TYPE, "application/json")
-            .body("{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":\"Balrog\"}}")?;
+            .body("{\"code\":\"permission_denied\",\"msg\":\"Thou shall not pass\",\"meta\":{\"target\":{\"String\":\"Balrog\"}}}")?;
         assert_eq!(
             TwirpError::from(response),
-            TwirpError::permission_denied("Thou shall not pass").with_meta("target", "Balrog")
+            TwirpError::permission_denied("Thou shall not pass")
+                .with_meta("target", TwirpErrorMetaValue::new_str("Balrog"))
         );
         Ok(())
     }
