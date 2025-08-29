@@ -42,6 +42,7 @@ impl IntegrationClient {
         if json {
             client.use_json();
         }
+
         Self {
             client: IntegrationServiceClient::new(client),
         }
@@ -120,12 +121,13 @@ impl TryFrom<Data> for TestRequest {
     type Error = Report;
 
     fn try_from(data: Data) -> Result<Self> {
+        let int = Int { value: data.any };
         Ok(Self {
             string: data.string,
             time: Some(data.time.into()),
             nested: Some(data.choice.into()),
             duration: Some(data.duration.try_into()?),
-            any: Some(Any::from_msg(&Int { value: data.any })?),
+            any: Some(Any::from_msg(&int)?),
             value: Some(Value::from(data.value)),
             option: Some(test_request::Option::Right(data.option)),
         })

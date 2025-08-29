@@ -76,7 +76,7 @@ impl TwirpBuilder {
     ///
     /// Note that the parameter type must implement [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
-    /// There is a companion method to this: [`with_service_specific_axum_request_extractor`], which adds request extractors per service,
+    /// There is a companion method to this: [`TwirpBuilder::with_service_specific_axum_request_extractor`], which adds request extractors per service,
     /// rather than for all services given to the build.
     pub fn with_default_axum_request_extractor(
         mut self,
@@ -120,7 +120,7 @@ impl TwirpBuilder {
     ///
     /// Note that the parameter type must implement [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
-    /// Service specific request extractors will overwrite any that are set by: [`with_default_axum_request_extractor`]. They are NOT additive, but you can
+    /// Service specific request extractors will overwrite any that are set by: [`TwirpBuilder::with_default_axum_request_extractor`]. They are NOT additive, but you can
     /// add any default extractors also as service specific ones, for example:
     /// ```ignore
     /// let builder = TwirpBuilder::new()
