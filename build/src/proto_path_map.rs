@@ -1,9 +1,10 @@
+//! Maps a fully-qualified Protobuf path to a value using path matchers.
+//! Original implementation: https://github.com/tokio-rs/prost/blob/5a2c7092964ac2eaaa516c61bcd48e3c66ea16b3/prost-build/src/path.rs
+
 use std::iter;
 
 use prost_build::Service;
 
-/// Maps a fully-qualified Protobuf path to a value using path matchers.
-/// Original implementation: https://github.com/tokio-rs/prost/blob/5a2c7092964ac2eaaa516c61bcd48e3c66ea16b3/prost-build/src/path.rs
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ProtoPathMap<T> {
     pub(crate) matchers: Vec<(String, T)>,
