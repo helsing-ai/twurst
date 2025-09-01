@@ -14,5 +14,6 @@ fn main() -> std::io::Result<()> {
     fs::create_dir_all(&dir)?;
     tonic_prost_build::configure()
         .out_dir(dir)
+        .type_attribute("Int", "#[allow(dead_code)]") // to make clippy happy
         .compile_protos(&["integration.proto"], &["."])
 }
