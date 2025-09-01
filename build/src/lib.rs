@@ -6,6 +6,7 @@
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+use self::proto_path_map::ProtoPathMap;
 pub use prost_build as prost;
 use prost_build::{Config, Module, Service, ServiceGenerator};
 use regex::Regex;
@@ -14,6 +15,8 @@ use std::fmt::Write;
 use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+mod proto_path_map;
 
 /// Builds protobuf bindings for Twirp.
 ///
@@ -58,6 +61,18 @@ impl TwirpBuilder {
         self
     }
 
+    #[deprecated(
+        since = "0.4.0",
+        note = "replaced with with_default_axum_request_extractor"
+    )]
+    pub fn with_axum_request_extractor(
+        self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+    ) -> Self {
+        self.with_default_axum_request_extractor(name, type_name)
+    }
+
     /// Adds an extra parameter to generated server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
     /// For example
@@ -89,7 +104,7 @@ impl TwirpBuilder {
         self
     }
 
-    /// Adds an extra parameter to the named service's server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
+    /// Adds an extra parameter to a service's server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
     /// For example, given:
     /// ```proto
@@ -142,16 +157,53 @@ impl TwirpBuilder {
     /// ```
     /// Will generate traits for `MyService` which extract both `auth_header` and
     /// `request_context`, whilst all others will just have `auth_header`.
+    ///
+    /// The service should be specified by Proto path. For example:
+    ///
+    /// ```ignore
+    /// let mut builder = TwirpBuilder::new().with_server();
+    ///
+    /// // Match any Service called `MyService`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     "MyService"
+    /// );
+    ///
+    /// // Match any Service called `MyService` in the package `MyPackage`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     ".MyPackage.MyService"
+    /// );
+    ///
+    /// // Match all Services in the package `MyPackage`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     ".MyPackage"
+    /// );
+    ///
+    /// // Match _any_ Service.
+    /// //
+    /// // NOTE: This will override the defaults for ALL services. This is useful if you want all
+    /// // services to have an extractor with a subset having additional ones, however it means you cannot
+    /// // have disjoint sets of extractors across services.
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     "."
+    /// );
     pub fn with_service_specific_axum_request_extractor(
         mut self,
         name: impl Into<String>,
         type_name: impl Into<String>,
-        service_name: impl Into<String>,
+        service_path: impl Into<String>,
     ) -> Self {
         self.generator = self.generator.with_service_specific_axum_request_extractor(
             name,
             type_name,
-            service_name,
+            service_path,
         );
         self
     }
@@ -263,7 +315,10 @@ struct TwirpServiceGenerator {
     client: bool,
     server: bool,
     grpc: bool,
-    request_extractors: Vec<(String, String, Option<String>)>,
+    // stores the default extractors as (argument_name, extractor_type)
+    default_request_extractors: Vec<(String, String)>,
+    // stores an extractor for a proto path as (argument_name, extractor_type)
+    matched_request_extractors: ProtoPathMap<(String, String)>,
 }
 
 impl TwirpServiceGenerator {
@@ -291,20 +346,20 @@ impl TwirpServiceGenerator {
         name: impl Into<String>,
         type_name: impl Into<String>,
     ) -> Self {
-        self.request_extractors
-            .push((name.into(), type_name.into(), None));
+        self.default_request_extractors
+            .push((name.into(), type_name.into()));
         self
     }
 
-    // This will override any and all default extractors, but only for the named service.
+    // This will override any and all default extractors, but only for the services which match service_proto_path.
     pub fn with_service_specific_axum_request_extractor(
         mut self,
         name: impl Into<String>,
         type_name: impl Into<String>,
-        service_name: impl Into<String>,
+        service_proto_path: impl Into<String>,
     ) -> Self {
-        self.request_extractors
-            .push((name.into(), type_name.into(), Some(service_name.into())));
+        self.matched_request_extractors
+            .insert(service_proto_path.into(), (name.into(), type_name.into()));
         self
     }
 }
@@ -318,33 +373,16 @@ impl ServiceGenerator for TwirpServiceGenerator {
 
 impl TwirpServiceGenerator {
     fn do_generate(&mut self, service: Service, buf: &mut String) -> std::fmt::Result {
-        // (Partition extractor list on default or service specific)
-        let (service_extractors, default_extractors): (Vec<_>, Vec<_>) = self
-            .request_extractors
-            .iter()
-            .partition(|(_, _, service_name)| service_name.is_some());
+        let mut service_matches = self
+            .matched_request_extractors
+            .service_matches(&service)
+            .peekable();
 
-        // (Filter service_extractors for matches on this service)
-        let service_extractors: Vec<_> = service_extractors
-            .into_iter()
-            .filter(|(_, _, service_name)| {
-                if let Some(name) = service_name {
-                    *name == service.name
-                } else {
-                    false
-                }
-            })
-            .collect();
-
-        // If no service specific ones are found, use the defaults (which might also be empty)
-        let extractors: Vec<_> = if service_extractors.is_empty() {
-            default_extractors
+        let extractors: Vec<_> = if service_matches.peek().is_some() {
+            service_matches.collect()
         } else {
-            service_extractors
-        }
-        .into_iter()
-        .map(|(arg_name, arg_type, _service_name)| (arg_name, arg_type))
-        .collect();
+            self.default_request_extractors.iter().collect()
+        };
 
         if self.client {
             writeln!(buf)?;

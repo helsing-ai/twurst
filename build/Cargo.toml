@@ -13,6 +13,9 @@ regex.workspace = true
 prost-build.workspace = true
 prost-reflect-build.workspace = true
 
+[dev-dependencies]
+prost-types.workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
