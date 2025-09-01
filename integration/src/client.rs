@@ -42,6 +42,7 @@ impl IntegrationClient {
         if json {
             client.use_json();
         }
+
         Self {
             client: IntegrationServiceClient::new(client),
         }

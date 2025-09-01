@@ -6,6 +6,7 @@
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
+use self::proto_path_map::ProtoPathMap;
 pub use prost_build as prost;
 use prost_build::{Config, Module, Service, ServiceGenerator};
 use regex::Regex;
@@ -14,6 +15,8 @@ use std::fmt::Write;
 use std::io::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+mod proto_path_map;
 
 /// Builds protobuf bindings for Twirp.
 ///
@@ -58,6 +61,18 @@ impl TwirpBuilder {
         self
     }
 
+    #[deprecated(
+        since = "0.4.0",
+        note = "replaced with with_default_axum_request_extractor"
+    )]
+    pub fn with_axum_request_extractor(
+        self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+    ) -> Self {
+        self.with_default_axum_request_extractor(name, type_name)
+    }
+
     /// Adds an extra parameter to generated server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
     ///
     /// For example
@@ -66,8 +81,8 @@ impl TwirpBuilder {
     ///     rpc Test(TestRequest) returns (TestResponse) {}
     /// }
     /// ```
-    /// Compiled with option `.with_axum_request_extractor("headers", "::axum::http::HeaderMap")`
-    /// will generate the following code allowing to extract the request headers:
+    /// Compiled with option `.with_default_axum_request_extractor("headers", "::axum::http::HeaderMap")`
+    /// will generate the following code (in every service) allowing to extract the request headers:
     /// ```ignore
     /// trait Service {
     ///     async fn test(request: TestRequest, headers: ::axum::http::HeaderMap) -> Result<TestResponse, TwirpError>;
@@ -75,12 +90,121 @@ impl TwirpBuilder {
     /// ```
     ///
     /// Note that the parameter type must implement [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
-    pub fn with_axum_request_extractor(
+    ///
+    /// There is a companion method to this: [`TwirpBuilder::with_service_specific_axum_request_extractor`], which adds request extractors per service,
+    /// rather than for all services given to the build.
+    pub fn with_default_axum_request_extractor(
         mut self,
         name: impl Into<String>,
         type_name: impl Into<String>,
     ) -> Self {
-        self.generator = self.generator.with_axum_request_extractor(name, type_name);
+        self.generator = self
+            .generator
+            .with_default_axum_request_extractor(name, type_name);
+        self
+    }
+
+    /// Adds an extra parameter to a service's server methods that implements [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
+    ///
+    /// For example, given:
+    /// ```proto
+    /// message ServiceA {
+    ///     rpc Test(TestRequest) returns (TestResponse) {}
+    /// }
+    /// ```
+    ///
+    /// And:
+    ///
+    /// ```proto
+    /// message ServiceB {
+    ///     rpc Test(TestRequest) returns (TestResponse) {}
+    /// }
+    /// ```
+    ///
+    /// When compiled with option `.with_service_specific_axum_request_extractor("headers", "::axum::http::HeaderMap", "ServiceA")`
+    /// will generate the following code extract the request headers in just implementors of `ServiceA`:
+    /// ```ignore
+    /// trait ServiceA {
+    ///     async fn test(request: TestRequest, headers: ::axum::http::HeaderMap) -> Result<TestResponse, TwirpError>;
+    /// }
+    ///
+    /// trait ServiceB {
+    ///     async fn test(request: TestRequest) -> Result<TestResponse, TwirpError>;
+    /// }
+    /// ```
+    ///
+    /// Note that the parameter type must implement [`axum::FromRequestParts`](https://docs.rs/axum/latest/axum/extract/trait.FromRequestParts.html).
+    ///
+    /// Service specific request extractors will overwrite any that are set by: [`TwirpBuilder::with_default_axum_request_extractor`]. They are NOT additive, but you can
+    /// add any default extractors also as service specific ones, for example:
+    /// ```ignore
+    /// let builder = TwirpBuilder::new()
+    ///     .with_server()
+    ///     .with_default_axum_request_extractor(
+    ///         "auth_header",
+    ///         "my_crate::AuthorizationHeader",
+    ///     )
+    ///     .with_service_specific_axum_request_extractor(
+    ///         "auth_header",
+    ///         "my_crate::AuthorizationHeader",
+    ///         "MyService"
+    ///     );
+    ///     .with_service_specific_axum_request_extractor(
+    ///         "request_context",
+    ///         "my_crate::RequestContext",
+    ///         "MyService"
+    ///     );
+    /// ```
+    /// Will generate traits for `MyService` which extract both `auth_header` and
+    /// `request_context`, whilst all others will just have `auth_header`.
+    ///
+    /// The service should be specified by Proto path. For example:
+    ///
+    /// ```ignore
+    /// let mut builder = TwirpBuilder::new().with_server();
+    ///
+    /// // Match any Service called `MyService`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     "MyService"
+    /// );
+    ///
+    /// // Match any Service called `MyService` in the package `MyPackage`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     ".MyPackage.MyService"
+    /// );
+    ///
+    /// // Match all Services in the package `MyPackage`
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     ".MyPackage"
+    /// );
+    ///
+    /// // Match _any_ Service.
+    /// //
+    /// // NOTE: This will override the defaults for ALL services. This is useful if you want all
+    /// // services to have an extractor with a subset having additional ones, however it means you cannot
+    /// // have disjoint sets of extractors across services.
+    /// builder.with_service_specific_axum_request_extractor(
+    ///     "auth_header",
+    ///     "my_crate::AuthorizationHeader",
+    ///     "."
+    /// );
+    pub fn with_service_specific_axum_request_extractor(
+        mut self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+        service_path: impl Into<String>,
+    ) -> Self {
+        self.generator = self.generator.with_service_specific_axum_request_extractor(
+            name,
+            type_name,
+            service_path,
+        );
         self
     }
 
@@ -106,6 +230,7 @@ impl TwirpBuilder {
         for proto in protos {
             println!("cargo:rerun-if-changed={}", proto.as_ref().display());
         }
+
         self.config
             .enable_type_names()
             .type_name_domain(
@@ -190,7 +315,10 @@ struct TwirpServiceGenerator {
     client: bool,
     server: bool,
     grpc: bool,
-    request_extractors: Vec<(String, String)>,
+    // stores the default extractors as (argument_name, extractor_type)
+    default_request_extractors: Vec<(String, String)>,
+    // stores an extractor for a proto path as (argument_name, extractor_type)
+    matched_request_extractors: ProtoPathMap<(String, String)>,
 }
 
 impl TwirpServiceGenerator {
@@ -213,13 +341,25 @@ impl TwirpServiceGenerator {
         self
     }
 
-    pub fn with_axum_request_extractor(
+    pub fn with_default_axum_request_extractor(
         mut self,
         name: impl Into<String>,
         type_name: impl Into<String>,
     ) -> Self {
-        self.request_extractors
+        self.default_request_extractors
             .push((name.into(), type_name.into()));
+        self
+    }
+
+    // This will override any and all default extractors, but only for the services which match service_proto_path.
+    pub fn with_service_specific_axum_request_extractor(
+        mut self,
+        name: impl Into<String>,
+        type_name: impl Into<String>,
+        service_proto_path: impl Into<String>,
+    ) -> Self {
+        self.matched_request_extractors
+            .insert(service_proto_path.into(), (name.into(), type_name.into()));
         self
     }
 }
@@ -233,6 +373,17 @@ impl ServiceGenerator for TwirpServiceGenerator {
 
 impl TwirpServiceGenerator {
     fn do_generate(&mut self, service: Service, buf: &mut String) -> std::fmt::Result {
+        let mut service_matches = self
+            .matched_request_extractors
+            .service_matches(&service)
+            .peekable();
+
+        let extractors: Vec<_> = if service_matches.peek().is_some() {
+            service_matches.collect()
+        } else {
+            self.default_request_extractors.iter().collect()
+        };
+
         if self.client {
             writeln!(buf)?;
             for comment in &service.comments.leading {
@@ -310,7 +461,7 @@ impl TwirpServiceGenerator {
                 } else {
                     write!(buf, "{}", method.input_type)?;
                 }
-                for (arg_name, arg_type) in &self.request_extractors {
+                for (arg_name, arg_type) in &extractors {
                     write!(buf, ", {arg_name}: {arg_type}")?;
                 }
                 writeln!(buf, ") -> Result<")?;
@@ -349,7 +500,7 @@ impl TwirpServiceGenerator {
                     "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
                     service.package, service.proto_name, method.proto_name, method.input_type,
                 )?;
-                if self.request_extractors.is_empty() {
+                if extractors.is_empty() {
                     write!(buf, ", _: ::twurst_server::codegen::RequestParts, _: S")?;
                 } else {
                     write!(
@@ -360,7 +511,7 @@ impl TwirpServiceGenerator {
                 write!(buf, "| {{")?;
                 writeln!(buf, "                async move {{")?;
                 write!(buf, "                    service.{}(request", method.name)?;
-                for (_name, type_name) in &self.request_extractors {
+                for (_name, type_name) in &extractors {
                     write!(
                         buf,
                         ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
@@ -404,7 +555,7 @@ impl TwirpServiceGenerator {
                     } else {
                         write!(buf, "{}", method.input_type)?;
                     }
-                    if self.request_extractors.is_empty() {
+                    if extractors.is_empty() {
                         write!(buf, ", _: ::twurst_server::codegen::RequestParts")?;
                     } else {
                         write!(buf, ", mut parts: ::twurst_server::codegen::RequestParts")?;
@@ -415,7 +566,7 @@ impl TwirpServiceGenerator {
                         write!(buf, "Ok(Box::into_pin(")?;
                     }
                     write!(buf, "service.{}(request", method.name)?;
-                    for (_name, type_name) in &self.request_extractors {
+                    for (_name, type_name) in &extractors {
                         write!(
                             buf,
                             ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"

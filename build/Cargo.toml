@@ -3,7 +3,7 @@ name = "twurst-build"
 description = "Build script to generate bindings for .proto files for Twirp"
 repository = "https://github.com/helsing-ai/twurst"
 documentation = "https://docs.rs/twurst-build"
-version = "0.3.0"
+version = "0.4.0-alpha.0"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,9 @@ license.workspace = true
 regex.workspace = true
 prost-build.workspace = true
 prost-reflect-build.workspace = true
+
+[dev-dependencies]
+prost-types.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
