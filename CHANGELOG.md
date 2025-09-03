@@ -1,3 +1,9 @@
+## [0.3.1] - 2025-09-03
+
+### Changed
+- mark `with_axum_request_extractor` as deprecated. Please use `with_default_axum_request_extractor` instead
+- introduce `with_service_specific_axum_request_extractor` to specify the signature of some services more precisely
+
 ## [0.3.0] - 2025-08-14
 
 ### Changed
