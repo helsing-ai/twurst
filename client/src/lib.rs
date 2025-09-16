@@ -439,7 +439,7 @@ mod tests {
     use super::*;
     use prost_reflect::ReflectMessage;
     use prost_reflect::prost::Message;
-    use prost_reflect::prost_types::{self, Timestamp};
+    use prost_reflect::prost_types::Timestamp;
     use std::future::Ready;
     use std::io;
     use std::task::{Context, Poll};
