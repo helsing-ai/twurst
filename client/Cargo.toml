@@ -29,6 +29,7 @@ trait-variant.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 tower = { workspace = true, features = ["util"] }
+prost.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
