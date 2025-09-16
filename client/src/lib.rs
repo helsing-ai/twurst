@@ -11,7 +11,7 @@ use http::{HeaderValue, Method, Request, Response, StatusCode};
 use http_body::{Body, Frame, SizeHint};
 use http_body_util::BodyExt;
 use prost_reflect::bytes::{Buf, Bytes, BytesMut};
-use prost_reflect::{DynamicMessage, ReflectMessage};
+use prost_reflect::{DeserializeOptions, DynamicMessage, ReflectMessage};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::error::Error;
@@ -372,8 +372,13 @@ fn dynamic_json_decode<T: ReflectMessage + Default>(
     message: &[u8],
 ) -> Result<DynamicMessage, serde_json::Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(message);
-    let dynamic_message =
-        DynamicMessage::deserialize(T::default().descriptor(), &mut deserializer)?;
+    let dynamic_message = DynamicMessage::deserialize_with_options(
+        T::default().descriptor(),
+        &mut deserializer,
+        // Ignore rather than returning an error when unknown fields are present, see:
+        // https://protobuf.dev/programming-guides/proto3/#wire-safe-changes
+        &DeserializeOptions::new().deny_unknown_fields(false),
+    )?;
     deserializer.end()?;
     Ok(dynamic_message)
 }
@@ -432,13 +437,28 @@ impl From<TwirpRequestBody> for reqwest_012::Body {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "reqwest-012")]
+    use prost_reflect::ReflectMessage;
     use prost_reflect::prost::Message;
-    use prost_reflect::prost_types::Timestamp;
+    use prost_reflect::prost_types::{self, Timestamp};
     use std::future::Ready;
     use std::io;
     use std::task::{Context, Poll};
     use tower::service_fn;
+
+    const FILE_DESCRIPTOR_SET_BYTES: &[u8] = &[
+        10, 107, 10, 21, 101, 120, 97, 109, 112, 108, 101, 95, 115, 101, 114, 118, 105, 99, 101,
+        46, 112, 114, 111, 116, 111, 18, 7, 112, 97, 99, 107, 97, 103, 101, 34, 11, 10, 9, 77, 121,
+        77, 101, 115, 115, 97, 103, 101, 74, 52, 10, 6, 18, 4, 0, 0, 5, 1, 10, 8, 10, 1, 12, 18, 3,
+        0, 0, 18, 10, 8, 10, 1, 2, 18, 3, 2, 0, 16, 10, 10, 10, 2, 4, 0, 18, 4, 4, 0, 5, 1, 10, 10,
+        10, 3, 4, 0, 1, 18, 3, 4, 8, 17, 98, 6, 112, 114, 111, 116, 111, 51,
+    ];
+
+    #[derive(Message, ReflectMessage, PartialEq)]
+    #[prost_reflect(
+        file_descriptor_set_bytes = "crate::tests::FILE_DESCRIPTOR_SET_BYTES",
+        message_name = "package.MyMessage"
+    )]
+    pub struct MyMessage {}
 
     #[tokio::test]
     async fn not_ready_service() -> Result<(), Box<dyn Error>> {
@@ -502,6 +522,28 @@ mod tests {
                 nanos: 0
             }
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn json_request_with_unknown_fields_ok() -> Result<(), Box<dyn Error>> {
+        let service = service_fn(|request: Request<TwirpRequestBody>| async move {
+            assert_eq!(request.method(), Method::POST);
+            assert_eq!(request.uri(), "/foo");
+            Ok::<_, TwirpError>(
+                Response::builder()
+                    .header(CONTENT_TYPE, APPLICATION_JSON)
+                    .body("{\"unknown_field\":\"ignored\"}".to_string())
+                    .unwrap(),
+            )
+        });
+
+        let mut client = TwirpHttpClient::new(service);
+        client.use_json();
+        let response = client
+            .call::<_, MyMessage>("/foo", &MyMessage::default())
+            .await?;
+        assert_eq!(response, MyMessage::default());
         Ok(())
     }
 

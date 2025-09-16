@@ -16,7 +16,7 @@ use http_body_util::BodyExt;
 #[cfg(feature = "grpc")]
 use pin_project_lite::pin_project;
 use prost_reflect::bytes::{Bytes, BytesMut};
-use prost_reflect::{DynamicMessage, ReflectMessage};
+use prost_reflect::{DeserializeOptions, DynamicMessage, ReflectMessage};
 use serde::Serialize;
 use std::future::Future;
 #[cfg(feature = "grpc")]
@@ -191,8 +191,13 @@ fn dynamic_json_decode<T: ReflectMessage + Default>(
     message: &[u8],
 ) -> Result<DynamicMessage, serde_json::Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(message);
-    let dynamic_message =
-        DynamicMessage::deserialize(T::default().descriptor(), &mut deserializer)?;
+    let dynamic_message = DynamicMessage::deserialize_with_options(
+        T::default().descriptor(),
+        &mut deserializer,
+        // Ignore rather than returning an error when unknown fields are present, see:
+        // https://protobuf.dev/programming-guides/proto3/#wire-safe-changes
+        &DeserializeOptions::new().deny_unknown_fields(false),
+    )?;
     deserializer.end()?;
     Ok(dynamic_message)
 }
@@ -602,23 +607,29 @@ mod tests {
                 |(), request: MyMessage, _, _| async move { Ok(request) },
             )
             .build();
-        let response = router
-            .into_service()
-            .call(
-                Request::builder()
-                    .method(Method::POST)
-                    .header(CONTENT_TYPE, APPLICATION_JSON)
-                    .uri("/package.MyService/MyMethod")
-                    .body(Body::from(b"{}".to_vec()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            response.into_body().collect().await.unwrap().to_bytes(),
-            b"{}".as_slice()
-        );
+        let mut service = router.into_service();
+        for body in [
+            b"{}".to_vec(),
+            // Unknown field sent to server should be ignored.
+            b"{\"unknown_field\": \"ignored\"}".to_vec(),
+        ] {
+            let response = service
+                .call(
+                    Request::builder()
+                        .method(Method::POST)
+                        .header(CONTENT_TYPE, APPLICATION_JSON)
+                        .uri("/package.MyService/MyMethod")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response.into_body().collect().await.unwrap().to_bytes(),
+                b"{}".as_slice()
+            );
+        }
     }
 
     #[tokio::test]
