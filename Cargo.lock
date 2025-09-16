@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "twurst-client"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "http",
  "http-body",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "twurst-server"
-version = "0.3.0"
+version = "0.3.2"
 dependencies = [
  "axum",
  "http-body-util",
