@@ -194,7 +194,7 @@ fn dynamic_json_decode<T: ReflectMessage + Default>(
     let dynamic_message = DynamicMessage::deserialize_with_options(
         T::default().descriptor(),
         &mut deserializer,
-        // Ignore rather than returning an error when unknown fields are present, see:
+        // Ignore rather than returning an error when unknown fields are present following the proto3 spec:
         // https://protobuf.dev/programming-guides/proto3/#wire-safe-changes
         &DeserializeOptions::new().deny_unknown_fields(false),
     )?;
