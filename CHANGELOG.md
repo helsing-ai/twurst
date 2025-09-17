@@ -1,7 +1,7 @@
 ## [0.3.2] - 2025-09-16
 
 ### Changed
-- Ignore unknown files in Twirp JSON payload instead of failing.
+- Ignore unknown fields in Twirp JSON payload instead of failing.
 
 ## [0.3.1] - 2025-09-03
 
