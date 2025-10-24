@@ -340,6 +340,20 @@ impl<B: AsRef<[u8]>> From<http::Response<B>> for TwirpError {
     }
 }
 
+#[cfg(feature = "http")]
+impl From<http::header::InvalidHeaderValue> for TwirpError {
+    fn from(value: http::header::InvalidHeaderValue) -> Self {
+        Self::invalid_argument(format!("invalid header value: {value}"))
+    }
+}
+
+#[cfg(feature = "http")]
+impl From<http::header::InvalidHeaderName> for TwirpError {
+    fn from(value: http::header::InvalidHeaderName) -> Self {
+        Self::invalid_argument(format!("invalid header name: {value}"))
+    }
+}
+
 #[cfg(feature = "axum-08")]
 impl axum_core_05::response::IntoResponse for TwirpError {
     #[inline]
