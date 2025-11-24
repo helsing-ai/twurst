@@ -10,7 +10,7 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: cargo login $CRATES_IO_TOKEN
         env:
           CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
