@@ -20,7 +20,7 @@ rust-version = "1.85"
 axum = { version = "0.8", default-features = false }
 axum-core-05 = { package = "axum-core", version = "0.5" }
 eyre = "0.6.10"
-http = "1.0.1"
+http = "1.4.0"
 http-body = "1"
 http-body-util = "0.1"
 pin-project-lite = "0.2.16"
