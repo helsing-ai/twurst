@@ -61,6 +61,12 @@ impl TwirpBuilder {
         self
     }
 
+    /// Custom Attribute for Twirp Service
+    pub fn with_custom_service_attribute(mut self, attribute: &str) -> Self {
+        self.generator.custom_service_attribute.push(attribute.to_string());
+        self
+    }
+
     #[deprecated(
         since = "0.3.1",
         note = "replaced with with_default_axum_request_extractor"
@@ -315,6 +321,7 @@ struct TwirpServiceGenerator {
     client: bool,
     server: bool,
     grpc: bool,
+    custom_service_attribute: Vec<String>,
     // stores the default extractors as (argument_name, extractor_type)
     default_request_extractors: Vec<(String, String)>,
     // stores an extractor for a proto path as (argument_name, extractor_type)
@@ -442,7 +449,14 @@ impl TwirpServiceGenerator {
             for comment in &service.comments.leading {
                 writeln!(buf, "/// {comment}")?;
             }
-            writeln!(buf, "#[::twurst_server::codegen::trait_variant_make(Send)]")?;
+            if self.custom_service_attribute.is_empty() {
+                writeln!(buf, "#[::twurst_server::codegen::trait_variant_make(Send)]")?;
+            } else {
+                for attribute in &self.custom_service_attribute {
+                    writeln!(buf, "{attribute}")?;
+                }
+            }
+
             writeln!(buf, "pub trait {} {{", service.name)?;
             for method in &service.methods {
                 if !self.grpc && (method.client_streaming || method.server_streaming) {
