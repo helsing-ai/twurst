@@ -42,6 +42,6 @@ tonic-prost-build = "0.14"
 tower-service = "0.3.3"
 tower = "0.5.2"
 tower-http = "0.6.7"
-tracing = "0.1.35"
+tracing = "0.1.43"
 trait-variant = "0.1.2"
 twurst-error = { path = "error", version = "0.3.0" }
