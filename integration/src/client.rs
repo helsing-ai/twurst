@@ -7,7 +7,7 @@ use prost_types::{Any, Value};
 use std::time::{Duration, SystemTime};
 use tower::ServiceBuilder;
 use tower_http::auth::{AddAuthorization, AddAuthorizationLayer};
-use twurst_client::{Reqwest012Service, TwirpHttpClient};
+use twurst_client::{Reqwest013Service, TwirpHttpClient};
 
 // Simple type to test nested message definition in .proto files
 #[derive(Debug, PartialEq, Clone)]
@@ -28,7 +28,7 @@ pub struct Data {
 }
 
 pub struct IntegrationClient {
-    client: IntegrationServiceClient<AddAuthorization<Reqwest012Service>>,
+    client: IntegrationServiceClient<AddAuthorization<Reqwest013Service>>,
 }
 
 impl IntegrationClient {
@@ -36,7 +36,7 @@ impl IntegrationClient {
         let mut client = TwirpHttpClient::new_with_base(
             ServiceBuilder::new()
                 .layer(AddAuthorizationLayer::bearer("password"))
-                .service(Reqwest012Service::new()),
+                .service(Reqwest013Service::new()),
             base_url,
         );
         if json {

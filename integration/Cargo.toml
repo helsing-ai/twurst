@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 twurst-server = { path = "../server", features = ["grpc"] }
-twurst-client = { path = "../client", features = ["reqwest-012"] }
+twurst-client = { path = "../client", features = ["reqwest-013"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 eyre.workspace = true
 prost.workspace = true
