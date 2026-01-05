@@ -1,7 +1,7 @@
 use crate::proto::{ExampleServiceClient, TestRequest};
 use eyre::{OptionExt, Result};
 use std::time::SystemTime;
-use twurst_client::{Reqwest012Service, TwirpHttpClient};
+use twurst_client::{Reqwest013Service, TwirpHttpClient};
 
 mod proto {
     include!(concat!(env!("OUT_DIR"), "/example.rs"));
@@ -14,12 +14,12 @@ pub struct Data {
 }
 
 pub struct ExampleClient {
-    client: ExampleServiceClient<Reqwest012Service>,
+    client: ExampleServiceClient<Reqwest013Service>,
 }
 
 impl ExampleClient {
     pub fn new(base_url: String, json: bool) -> Self {
-        let mut client = TwirpHttpClient::new_using_reqwest_012(base_url);
+        let mut client = TwirpHttpClient::new_using_reqwest_013(base_url);
         if json {
             client.use_json();
         }

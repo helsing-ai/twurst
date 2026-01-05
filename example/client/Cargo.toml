@@ -7,7 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-twurst-client = { path = "../../client", features = ["reqwest-012"] }
+twurst-client = { path = "../../client", features = ["reqwest-013"] }
 eyre.workspace = true
 prost.workspace = true
 prost-types.workspace = true
