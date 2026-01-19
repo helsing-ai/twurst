@@ -41,7 +41,7 @@ tonic-014 = { package = "tonic", version = "0.14.2", default-features = false }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 tower-service = "0.3.3"
-tower = "0.5.2"
+tower = "0.5.3"
 tower-http = "0.6.8"
 tracing = "0.1.44"
 trait-variant = "0.1.2"
