@@ -24,3 +24,4 @@ tower-http = { workspace = true, features = ["auth", "cors"] }
 [build-dependencies]
 twurst-build.path = "../build"
 tonic-prost-build.workspace = true
+prost-reflect-build.workspace = true
