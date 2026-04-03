@@ -7,9 +7,11 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use self::proto_path_map::ProtoPathMap;
+use prettyplease::unparse;
+use proc_macro2::TokenStream;
 pub use prost_build as prost;
-use prost_build::{Config, Module, Service, ServiceGenerator};
-use quote::ToTokens;
+use prost_build::{Comments, Config, Module, Service, ServiceGenerator};
+use quote::{format_ident, quote};
 use std::collections::HashSet;
 use std::fmt::Write;
 use std::io::{Error, ErrorKind, Result};
@@ -280,7 +282,7 @@ fn add_use_file_descriptor_to_file(file: &str) -> Result<String> {
     ast.items.push(parse_quote! {
         const FILE_DESCRIPTOR_SET_BYTES: &[u8] = include_bytes!("file_descriptor_set.bin");
     });
-    Ok(ast.into_token_stream().to_string())
+    Ok(unparse(&ast))
 }
 
 fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
@@ -362,226 +364,242 @@ impl TwirpServiceGenerator {
 
 impl ServiceGenerator for TwirpServiceGenerator {
     fn generate(&mut self, service: Service, buf: &mut String) {
-        self.do_generate(service, buf)
-            .expect("failed to generate Twirp service")
-    }
-}
-
-impl TwirpServiceGenerator {
-    fn do_generate(&mut self, service: Service, buf: &mut String) -> std::fmt::Result {
         let mut service_matches = self
             .matched_request_extractors
             .service_matches(&service)
             .peekable();
-
-        let extractors: Vec<_> = if service_matches.peek().is_some() {
-            service_matches.collect()
+        let extractors = if service_matches.peek().is_some() {
+            service_matches.collect::<Vec<_>>()
         } else {
             self.default_request_extractors.iter().collect()
         };
 
+        let extractor_names = extractors
+            .iter()
+            .map(|(n, _)| format_ident!("{n}"))
+            .collect::<Vec<_>>();
+        let extractor_types = extractors
+            .iter()
+            .map(|(_, t)| t.parse().unwrap())
+            .collect::<Vec<TokenStream>>();
+
+        let mut output = TokenStream::new();
         if self.client {
-            writeln!(buf)?;
-            for comment in &service.comments.leading {
-                writeln!(buf, "/// {comment}")?;
-            }
-            if service.options.deprecated.unwrap_or(false) {
-                writeln!(buf, "#[deprecated]")?;
-            }
-            writeln!(buf, "#[derive(Clone)]")?;
-            writeln!(
-                buf,
-                "pub struct {}Client<C: ::twurst_client::TwirpHttpService> {{",
-                service.name
-            )?;
-            writeln!(buf, "    client: ::twurst_client::TwirpHttpClient<C>")?;
-            writeln!(buf, "}}")?;
-            writeln!(buf)?;
-            writeln!(
-                buf,
-                "impl<C: ::twurst_client::TwirpHttpService> {}Client<C> {{",
-                service.name
-            )?;
-            writeln!(
-                buf,
-                "    pub fn new(client: impl Into<::twurst_client::TwirpHttpClient<C>>) -> Self {{"
-            )?;
-            writeln!(buf, "        Self {{ client: client.into() }}")?;
-            writeln!(buf, "    }}")?;
-            for method in &service.methods {
-                if method.client_streaming || method.server_streaming {
-                    continue; // Not supported
+            let client_name = format_ident!("{}Client", service.name);
+            let service_docs = quote_comments(&service.comments);
+            let service_deprecated = if service.options.deprecated.unwrap_or(false) {
+                Some(quote! { #[deprecated] })
+            } else {
+                None
+            };
+
+            let method_tokens = service
+                .methods
+                .iter()
+                .filter(|m| !m.client_streaming && !m.server_streaming)
+                .map(|method| {
+                    let method_ident = format_ident!("{}", method.name);
+                    let input_type: TokenStream = method.input_type.parse().unwrap();
+                    let output_type: TokenStream = method.output_type.parse().unwrap();
+                    let route = format!(
+                        "/{}.{}/{}",
+                        service.package, service.proto_name, method.proto_name
+                    );
+                    let method_docs = quote_comments(&method.comments);
+                    let method_deprecated = if method.options.deprecated.unwrap_or(false) {
+                        quote! { #[deprecated] }
+                    } else {
+                        quote! {}
+                    };
+                    quote! {
+                        #(#method_docs)*
+                        #method_deprecated
+                        pub async fn #method_ident(&self, request: &#input_type) -> Result<#output_type, ::twurst_client::TwirpError> {
+                            self.client.call(#route, request).await
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            output.extend(quote! {
+                #(#service_docs)*
+                #service_deprecated
+                #[derive(Clone)]
+                pub struct #client_name<C: ::twurst_client::TwirpHttpService> {
+                    client: ::twurst_client::TwirpHttpClient<C>,
                 }
-                for comment in &method.comments.leading {
-                    writeln!(buf, "    /// {comment}")?;
+
+                impl<C: ::twurst_client::TwirpHttpService> #client_name<C> {
+                    pub fn new(client: impl Into<::twurst_client::TwirpHttpClient<C>>) -> Self {
+                        Self { client: client.into() }
+                    }
+                    #(#method_tokens)*
                 }
-                if method.options.deprecated.unwrap_or(false) {
-                    writeln!(buf, "#[deprecated]")?;
-                }
-                writeln!(
-                    buf,
-                    "    pub async fn {}(&self, request: &{}) -> Result<{}, ::twurst_client::TwirpError> {{",
-                    method.name, method.input_type, method.output_type,
-                )?;
-                writeln!(
-                    buf,
-                    "        self.client.call(\"/{}.{}/{}\", request).await",
-                    service.package, service.proto_name, method.proto_name,
-                )?;
-                writeln!(buf, "    }}")?;
-            }
-            writeln!(buf, "}}")?;
+            });
         }
 
         if self.server {
-            writeln!(buf)?;
-            for comment in &service.comments.leading {
-                writeln!(buf, "/// {comment}")?;
-            }
-            writeln!(buf, "#[::twurst_server::codegen::trait_variant_make(Send)]")?;
-            writeln!(buf, "pub trait {} {{", service.name)?;
-            for method in &service.methods {
-                if !self.grpc && (method.client_streaming || method.server_streaming) {
-                    continue; // No streaming
-                }
-                for comment in &method.comments.leading {
-                    writeln!(buf, "    /// {comment}")?;
-                }
-                write!(buf, "    async fn {}(&self, request: ", method.name)?;
-                if method.client_streaming {
-                    write!(
-                        buf,
-                        "impl ::twurst_server::codegen::Stream<Item=Result<{},::twurst_client::TwirpError>> + Send + 'static",
-                        method.input_type,
-                    )?;
-                } else {
-                    write!(buf, "{}", method.input_type)?;
-                }
-                for (arg_name, arg_type) in &extractors {
-                    write!(buf, ", {arg_name}: {arg_type}")?;
-                }
-                writeln!(buf, ") -> Result<")?;
-                if method.server_streaming {
-                    // TODO: move back to `impl` when we will be able to use precise capturing to not capture &self
-                    writeln!(
-                        buf,
-                        "Box<dyn ::twurst_server::codegen::Stream<Item=Result<{}, ::twurst_server::TwirpError>> + Send>",
-                        method.output_type
-                    )?;
-                } else {
-                    writeln!(buf, "{}", method.output_type)?;
-                }
-                writeln!(buf, ", ::twurst_server::TwirpError>;")?;
-            }
-            writeln!(buf)?;
-            writeln!(
-                buf,
-                "    fn into_router<S: Clone + Send + Sync + 'static>(self) -> ::twurst_server::codegen::Router<S> where Self : Sized + Send + Sync + 'static {{"
-            )?;
-            writeln!(
-                buf,
-                "        ::twurst_server::codegen::TwirpRouter::new(::std::sync::Arc::new(self))"
-            )?;
-            for method in &service.methods {
-                if method.client_streaming || method.server_streaming {
-                    writeln!(
-                        buf,
-                        "            .route_streaming(\"/{}.{}/{}\")",
-                        service.package, service.proto_name, method.proto_name,
-                    )?;
-                    continue;
-                }
-                write!(
-                    buf,
-                    "            .route(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: {}",
-                    service.package, service.proto_name, method.proto_name, method.input_type,
-                )?;
-                if extractors.is_empty() {
-                    write!(buf, ", _: ::twurst_server::codegen::RequestParts, _: S")?;
-                } else {
-                    write!(
-                        buf,
-                        ", mut parts: ::twurst_server::codegen::RequestParts, state: S",
-                    )?;
-                }
-                write!(buf, "| {{")?;
-                writeln!(buf, "                async move {{")?;
-                write!(buf, "                    service.{}(request", method.name)?;
-                for (_name, type_name) in &extractors {
-                    write!(
-                        buf,
-                        ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
-                    )?;
-                }
-                writeln!(buf, ").await")?;
-                writeln!(buf, "                }}")?;
-                writeln!(buf, "            }})")?;
-            }
-            writeln!(buf, "            .build()")?;
-            writeln!(buf, "    }}")?;
+            let service_name_ident = format_ident!("{}", service.name);
 
-            if self.grpc {
-                writeln!(buf)?;
-                writeln!(
-                    buf,
-                    "    fn into_grpc_router(self) -> ::twurst_server::codegen::Router where Self : Sized + Send + Sync + 'static {{"
-                )?;
-                writeln!(
-                    buf,
-                    "        ::twurst_server::codegen::GrpcRouter::new(::std::sync::Arc::new(self))"
-                )?;
-                for method in &service.methods {
-                    let method_name = match (method.client_streaming, method.server_streaming) {
-                        (false, false) => "route",
-                        (false, true) => "route_server_streaming",
-                        (true, false) => "route_client_streaming",
-                        (true, true) => "route_streaming",
+            let service_docs = quote_comments(&service.comments);
+
+            let trait_method_tokens = service
+                .methods
+                .iter()
+                .filter(|m| self.grpc || (!m.client_streaming && !m.server_streaming))
+                .map(|method| {
+                    let method_ident = format_ident!("{}", method.name);
+                    let input_type: TokenStream = method.input_type.parse().unwrap();
+                    let output_type: TokenStream = method.output_type.parse().unwrap();
+                    let method_docs = quote_comments(&method.comments);
+                    let request_param = if method.client_streaming {
+                        quote! {
+                            impl ::twurst_server::codegen::Stream<Item=Result<#input_type,::twurst_client::TwirpError>> + Send + 'static
+                        }
+                    } else {
+                        input_type
                     };
-                    write!(
-                        buf,
-                        "            .{}(\"/{}.{}/{}\", |service: ::std::sync::Arc<Self>, request: ",
-                        method_name, service.package, service.proto_name, method.proto_name,
-                    )?;
-                    if method.client_streaming {
-                        write!(
-                            buf,
-                            "::twurst_server::codegen::GrpcClientStream<{}>",
-                            method.input_type,
-                        )?;
-                    } else {
-                        write!(buf, "{}", method.input_type)?;
-                    }
-                    if extractors.is_empty() {
-                        write!(buf, ", _: ::twurst_server::codegen::RequestParts")?;
-                    } else {
-                        write!(buf, ", mut parts: ::twurst_server::codegen::RequestParts")?;
-                    }
-                    write!(buf, "| {{")?;
-                    write!(buf, "                async move {{")?;
-                    if method.server_streaming {
-                        write!(buf, "Ok(Box::into_pin(")?;
-                    }
-                    write!(buf, "service.{}(request", method.name)?;
-                    for (_name, type_name) in &extractors {
-                        write!(
-                            buf,
-                            ", match <{type_name} as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await {{ Ok(r) => r, Err(e) => {{ return Err(::twurst_server::codegen::twirp_error_from_response(e).await) }} }}"
-                        )?;
-                    }
-                    write!(buf, ").await")?;
-                    if method.server_streaming {
-                        write!(buf, "?))")?;
-                    }
-                    writeln!(buf, "}}")?;
-                    writeln!(buf, "            }})")?;
-                }
-                writeln!(buf, "            .build()")?;
-                writeln!(buf, "    }}")?;
-            }
 
-            writeln!(buf, "}}")?;
+                    // TODO: move back to `impl` when we will be able to use precise capturing to not capture &self
+                    let return_type = if method.server_streaming {
+                        quote! {
+                            Box<dyn ::twurst_server::codegen::Stream<Item=Result<#output_type, ::twurst_server::TwirpError>> + Send>
+                        }
+                    } else {
+                        output_type
+                    };
+
+                    quote! {
+                        #(#method_docs)*
+                        async fn #method_ident(&self, request: #request_param #(, #extractor_names: #extractor_types)*) -> Result<#return_type, ::twurst_server::TwirpError>;
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let router_route_tokens = service
+                .methods
+                .iter()
+                .map(|method| {
+                    let route = format!(
+                        "/{}.{}/{}",
+                        service.package, service.proto_name, method.proto_name
+                    );
+                    let method_ident = format_ident!("{}", method.name);
+                    let input_type: TokenStream = method.input_type.parse().unwrap();
+
+                    if method.client_streaming || method.server_streaming {
+                        quote! { .route_streaming(#route) }
+                    } else {
+                        let (parts_param, state_param) = if extractors.is_empty() {
+                            (
+                                quote! { _: ::twurst_server::codegen::RequestParts },
+                                quote! { _: S },
+                            )
+                        } else {
+                            (
+                                quote! { mut parts: ::twurst_server::codegen::RequestParts },
+                                quote! { state: S },
+                            )
+                        };
+
+                        let ext_types = extractor_types.clone();
+
+                        quote! {
+                            .route(#route, |service: ::std::sync::Arc<Self>, request: #input_type, #parts_param, #state_param| {
+                                async move {
+                                    service.#method_ident(request #(, match <#ext_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await { Ok(r) => r, Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
+                                }
+                            })
+                        }
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let grpc_router_tokens = if self.grpc {
+                let grpc_route_tokens = service
+                    .methods
+                    .iter()
+                    .map(|method| {
+                        let route = format!(
+                            "/{}.{}/{}",
+                            service.package, service.proto_name, method.proto_name
+                        );
+                        let method_ident = format_ident!("{}", method.name);
+                        let input_type: TokenStream = method.input_type.parse().unwrap();
+                        let grpc_fn_ident =
+                            match (method.client_streaming, method.server_streaming) {
+                                (false, false) => format_ident!("route"),
+                                (false, true) => format_ident!("route_server_streaming"),
+                                (true, false) => format_ident!("route_client_streaming"),
+                                (true, true) => format_ident!("route_streaming"),
+                            };
+                        let request_type = if method.client_streaming {
+                            quote! { ::twurst_server::codegen::GrpcClientStream<#input_type> }
+                        } else {
+                            input_type
+                        };
+                        let parts_param = if extractors.is_empty() {
+                            quote! { _: ::twurst_server::codegen::RequestParts }
+                        } else {
+                            quote! { mut parts: ::twurst_server::codegen::RequestParts }
+                        };
+                        let service_call = quote! {
+                                service.#method_ident(request #(, match <#extractor_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await { Ok(r) => r, Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
+                            };
+                        let service_call = if method.server_streaming {
+                            quote! { Ok(Box::into_pin(#service_call?)) }
+                        } else {
+                            service_call
+                        };
+                        quote! {
+                            .#grpc_fn_ident(#route, |service: ::std::sync::Arc<Self>, request: #request_type, #parts_param| {
+                                async move {
+                                    #service_call
+                                }
+                            })
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                Some(quote! {
+                    fn into_grpc_router(self) -> ::twurst_server::codegen::Router where Self: Sized + Send + Sync + 'static {
+                        ::twurst_server::codegen::GrpcRouter::new(::std::sync::Arc::new(self))
+                        #(#grpc_route_tokens)*
+                        .build()
+                    }
+                })
+            } else {
+                None
+            };
+
+            output.extend(quote! {
+                #(#service_docs)*
+                #[::twurst_server::codegen::trait_variant_make(Send)]
+                pub trait #service_name_ident {
+                    #(#trait_method_tokens)*
+
+                    fn into_router<S: Clone + Send + Sync + 'static>(self) -> ::twurst_server::codegen::Router<S> where Self: Sized + Send + Sync + 'static {
+                        ::twurst_server::codegen::TwirpRouter::new(::std::sync::Arc::new(self))
+                        #(#router_route_tokens)*
+                        .build()
+                    }
+
+                    #grpc_router_tokens
+                }
+            });
         }
 
-        Ok(())
+        if !output.is_empty() {
+            buf.push('\n');
+            write!(buf, "{output}").unwrap()
+        }
     }
+}
+
+fn quote_comments(comments: &Comments) -> Vec<TokenStream> {
+    comments
+        .leading
+        .iter()
+        .map(|c| quote! { #[doc = #c] })
+        .collect::<Vec<_>>()
 }
