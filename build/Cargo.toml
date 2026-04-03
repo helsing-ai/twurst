@@ -7,11 +7,13 @@ version = "0.3.1"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
-regex.workspace = true
 prost-build.workspace = true
 prost-reflect-build.workspace = true
+quote.workspace = true
+syn.workspace = true
 
 [dev-dependencies]
 prost-types.workspace = true

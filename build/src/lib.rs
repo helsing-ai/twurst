@@ -9,12 +9,13 @@
 use self::proto_path_map::ProtoPathMap;
 pub use prost_build as prost;
 use prost_build::{Config, Module, Service, ServiceGenerator};
-use regex::Regex;
+use quote::ToTokens;
 use std::collections::HashSet;
 use std::fmt::Write;
-use std::io::{Error, Result};
+use std::io::{Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use syn::{Item, parse_quote};
 
 mod proto_path_map;
 
@@ -258,12 +259,6 @@ impl TwirpBuilder {
         // We generate the files
         config.compile_fds(file_descriptor_set)?;
 
-        // TODO(vsiles) consider proper AST parsing in case we need to do something
-        // more robust
-        //
-        // prepare a regex to match `pub mod <module-name> {`
-        let re = Regex::new(r"^(\s*)pub mod \w+ \{\s*$").expect("Failed to compile regex");
-
         // We add the file descriptor to every file to make reflection work automatically
         for module in modules {
             let file_path = Path::new(&out_dir).join(module.to_file_name_or("_"));
@@ -271,35 +266,36 @@ impl TwirpBuilder {
                 continue; // We ignore not built files
             }
             let original_content = fs::read_to_string(&file_path)?;
-
-            // scan for nested modules and insert the right FILE_DESCRIPTOR_SET_BYTES definition
-            let mut modified_content = original_content
-                .lines()
-                .flat_map(|line| {
-                    if let Some(captures) = re.captures(line) {
-                        let indentation = captures.get(1).map_or("", |m| m.as_str());
-                        vec![
-                            line.to_string(),
-                            // if there is no nested type, the next line would generate a warning
-                            format!("    {}{}", indentation, "#[allow(unused_imports)]"),
-                            format!(
-                                "    {}{}",
-                                indentation, "use super::FILE_DESCRIPTOR_SET_BYTES;"
-                            ),
-                        ]
-                    } else {
-                        vec![line.to_string()]
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            modified_content.push("const FILE_DESCRIPTOR_SET_BYTES: &[u8] = include_bytes!(\"file_descriptor_set.bin\");\n".to_string());
-            let file_content = modified_content.join("\n");
-
-            fs::write(&file_path, &file_content)?;
+            let modified_content = add_use_file_descriptor_to_file(&original_content)?;
+            fs::write(&file_path, &modified_content)?;
         }
 
         Ok(())
+    }
+}
+
+fn add_use_file_descriptor_to_file(file: &str) -> Result<String> {
+    let mut ast = syn::parse_file(file).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    add_use_file_descriptor_to_nested_modules(&mut ast.items);
+    ast.items.push(parse_quote! {
+        const FILE_DESCRIPTOR_SET_BYTES: &[u8] = include_bytes!("file_descriptor_set.bin");
+    });
+    Ok(ast.into_token_stream().to_string())
+}
+
+fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
+    for item in items {
+        if let Item::Mod(module) = item {
+            if let Some((_, module_content)) = &mut module.content {
+                module_content.insert(
+                    0,
+                    parse_quote! {
+                        #[allow(unused_imports)]
+                        use super::FILE_DESCRIPTOR_SET_BYTES;
+                    },
+                );
+            }
+        }
     }
 }
 

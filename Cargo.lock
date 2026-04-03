@@ -1395,7 +1395,8 @@ dependencies = [
  "prost-build",
  "prost-reflect-build",
  "prost-types",
- "regex",
+ "quote",
+ "syn",
 ]
 
 [[package]]
