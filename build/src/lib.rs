@@ -29,6 +29,7 @@ pub struct TwirpBuilder {
     config: Config,
     generator: TwirpServiceGenerator,
     type_name_domain: Option<String>,
+    skip_prost_reflect: bool,
 }
 
 impl TwirpBuilder {
@@ -43,6 +44,7 @@ impl TwirpBuilder {
             config,
             generator: TwirpServiceGenerator::new(),
             type_name_domain: None,
+            skip_prost_reflect: false,
         }
     }
 
@@ -211,6 +213,17 @@ impl TwirpBuilder {
         self
     }
 
+    /// Skips the built-in prost-reflect configuration and file patching.
+    ///
+    /// When enabled, callers are responsible for configuring prost-reflect
+    /// on the [`Config`] before passing it to [`from_prost`](Self::from_prost).
+    /// This is useful when using a custom `out_dir` or when using
+    /// `descriptor_pool` mode instead of `file_descriptor_set_bytes`.
+    pub fn skip_prost_reflect(mut self) -> Self {
+        self.skip_prost_reflect = true;
+        self
+    }
+
     /// Customizes the type name domain.
     ///
     /// By default, 'type.googleapis.com' is used.
@@ -245,9 +258,11 @@ impl TwirpBuilder {
             .service_generator(Box::new(self.generator));
 
         // We configure with prost reflect
-        prost_reflect_build::Builder::new()
-            .file_descriptor_set_bytes("self::FILE_DESCRIPTOR_SET_BYTES")
-            .configure(&mut self.config, protos, includes)?;
+        if !self.skip_prost_reflect {
+            prost_reflect_build::Builder::new()
+                .file_descriptor_set_bytes("self::FILE_DESCRIPTOR_SET_BYTES")
+                .configure(&mut self.config, protos, includes)?;
+        }
 
         // We do the build itself while saving the list of modules
         let config = self.config.skip_protoc_run();
@@ -262,14 +277,16 @@ impl TwirpBuilder {
         config.compile_fds(file_descriptor_set)?;
 
         // We add the file descriptor to every file to make reflection work automatically
-        for module in modules {
-            let file_path = Path::new(&out_dir).join(module.to_file_name_or("_"));
-            if !file_path.exists() {
-                continue; // We ignore not built files
+        if !self.skip_prost_reflect {
+            for module in modules {
+                let file_path = Path::new(&out_dir).join(module.to_file_name_or("_"));
+                if !file_path.exists() {
+                    continue; // We ignore not built files
+                }
+                let original_content = fs::read_to_string(&file_path)?;
+                let modified_content = add_use_file_descriptor_to_file(&original_content)?;
+                fs::write(&file_path, &modified_content)?;
             }
-            let original_content = fs::read_to_string(&file_path)?;
-            let modified_content = add_use_file_descriptor_to_file(&original_content)?;
-            fs::write(&file_path, &modified_content)?;
         }
 
         Ok(())

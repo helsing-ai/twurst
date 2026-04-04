@@ -1467,6 +1467,7 @@ dependencies = [
  "eyre",
  "prost",
  "prost-reflect",
+ "prost-reflect-build",
  "prost-types",
  "tokio",
  "tokio-stream",
