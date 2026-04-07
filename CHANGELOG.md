@@ -1,7 +1,16 @@
+## [0.3.4] - 2026-04-07
+
+### Added
+- `TwirpBuilder::skip_prost_reflect()` to enable custom `out_dir` support in `twurst-build`.
+
+### Changed
+- Bump MSRV to 1.86.
+- Build: use `syn` and `quote` to parse and generate code in `twurst-build`.
+
 ## [0.3.3] - 2026-01-05
 
 ### Changed
-- Added support for reqwest 0.13 (new feature on client crate)
+- Added support for reqwest 0.13 (new feature on client crate).
 
 ## [0.3.2] - 2025-09-16
 
