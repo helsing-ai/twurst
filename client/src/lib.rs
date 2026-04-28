@@ -7,7 +7,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use http::header::CONTENT_TYPE;
-use http::{HeaderValue, Method, Request, Response, StatusCode};
+use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
 use http_body::{Body, Frame, SizeHint};
 use http_body_util::BodyExt;
 use prost_reflect::bytes::{Buf, Bytes, BytesMut};
@@ -179,6 +179,19 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
         path: &str,
         request: &I,
     ) -> Result<O, TwirpError> {
+        self.call_with_headers(path, request, &HeaderMap::new())
+            .await
+    }
+
+    /// Send a Twirp request and get a response with extra per-call headers.
+    ///
+    /// Used internally by the generated code.
+    pub async fn call_with_headers<I: ReflectMessage, O: ReflectMessage + Default>(
+        &self,
+        path: &str,
+        request: &I,
+        headers: &HeaderMap,
+    ) -> Result<O, TwirpError> {
         // We ensure that the service is ready
         self.service.ready().await.map_err(|e| {
             TwirpError::wrap(
@@ -187,7 +200,8 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
                 e,
             )
         })?;
-        let request = self.build_request(path, request)?;
+        let mut request = self.build_request(path, request)?;
+        request.headers_mut().extend(headers.clone());
         let response = self.service.call(request).await.map_err(|e| {
             TwirpError::wrap(
                 TwirpErrorCode::Unknown,
@@ -596,6 +610,53 @@ mod tests {
                     seconds: 10,
                     nanos: 0,
                 },
+            )
+            .await?;
+        assert_eq!(
+            response,
+            Timestamp {
+                seconds: 10,
+                nanos: 0
+            }
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn request_with_per_call_headers_ok() -> Result<(), Box<dyn Error>> {
+        let service = service_fn(|request: Request<TwirpRequestBody>| async move {
+            assert_eq!(request.method(), Method::POST);
+            assert_eq!(request.uri(), "/foo");
+            assert_eq!(
+                request.headers().get(http::header::AUTHORIZATION),
+                Some(&HeaderValue::from_static("Bearer token"))
+            );
+            assert_eq!(
+                request.headers().get(CONTENT_TYPE),
+                Some(&APPLICATION_PROTOBUF)
+            );
+            Ok::<_, TwirpError>(
+                Response::builder()
+                    .header(CONTENT_TYPE, APPLICATION_JSON)
+                    .body("\"1970-01-01T00:00:10Z\"".to_string())
+                    .unwrap(),
+            )
+        });
+
+        let client = TwirpHttpClient::new(service);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer token"),
+        );
+        let response = client
+            .call_with_headers::<_, Timestamp>(
+                "/foo",
+                &Timestamp {
+                    seconds: 10,
+                    nanos: 0,
+                },
+                &headers,
             )
             .await?;
         assert_eq!(
