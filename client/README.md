@@ -44,17 +44,20 @@ async fn main() {
 }
 ```
 
-For per-call headers such as auth tokens or correlation IDs, use
-[`TwirpHttpClient::call_with_headers`](https://docs.rs/twurst-client/latest/twurst_client/struct.TwirpHttpClient.html):
+For per-call customization such as auth tokens or correlation IDs, use
+[`TwirpHttpClient::call_builder`](https://docs.rs/twurst-client/latest/twurst_client/struct.TwirpHttpClient.html#method.call_builder),
+which returns a builder with chainable `.header(...)` / `.headers(...)` methods and is dispatched with `.send()`:
 ```rust,ignore
 use http::header::AUTHORIZATION;
+use http::HeaderValue;
 use twurst_client::TwirpHttpClient;
 
 async fn call_direct(client: &TwirpHttpClient<impl twurst_client::TwirpHttpService>) -> Result<(), Box<dyn std::error::Error>> {
-    let mut headers = http::HeaderMap::new();
-    headers.insert(AUTHORIZATION, "Bearer token".parse()?);
     let _response: TestResponse = client
-        .call_with_headers("/example.ExampleService/Test", &TestRequest {}, &headers)
+        .call_builder("/example.ExampleService/Test", &TestRequest {})
+        .header(AUTHORIZATION, HeaderValue::from_static("Bearer token"))
+        .header("x-request-id", "abc-123")
+        .send()
         .await?;
     Ok(())
 }

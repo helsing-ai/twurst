@@ -7,7 +7,7 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use http::header::CONTENT_TYPE;
-use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
+use http::{HeaderMap, HeaderName, HeaderValue, Method, Request, Response, StatusCode};
 use http_body::{Body, Frame, SizeHint};
 use http_body_util::BodyExt;
 use prost_reflect::bytes::{Buf, Bytes, BytesMut};
@@ -174,42 +174,49 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
     /// Send a Twirp request and get a response.
     ///
     /// Used internally by the generated code.
+    /// To customize the request (e.g. attach per-call headers), use [`Self::call_builder`].
     pub async fn call<I: ReflectMessage, O: ReflectMessage + Default>(
         &self,
         path: &str,
         request: &I,
     ) -> Result<O, TwirpError> {
-        self.call_with_headers(path, request, &HeaderMap::new())
-            .await
+        self.call_builder(path, request).send().await
     }
 
-    /// Send a Twirp request and get a response with extra per-call headers.
+    /// Start building a Twirp call, allowing per-call customization such as extra HTTP headers.
     ///
-    /// Used internally by the generated code.
-    pub async fn call_with_headers<I: ReflectMessage, O: ReflectMessage + Default>(
-        &self,
-        path: &str,
-        request: &I,
-        headers: &HeaderMap,
-    ) -> Result<O, TwirpError> {
-        // We ensure that the service is ready
-        self.service.ready().await.map_err(|e| {
-            TwirpError::wrap(
-                TwirpErrorCode::Unknown,
-                format!("Service is not ready: {e}"),
-                e,
-            )
-        })?;
-        let mut request = self.build_request(path, request)?;
-        request.headers_mut().extend(headers.clone());
-        let response = self.service.call(request).await.map_err(|e| {
-            TwirpError::wrap(
-                TwirpErrorCode::Unknown,
-                format!("Transport error during the request: {e}"),
-                e,
-            )
-        })?;
-        self.extract_response(response).await
+    /// The returned [`TwirpCallBuilder`] is dispatched by calling [`TwirpCallBuilder::send`].
+    ///
+    /// ```
+    /// use http::header::AUTHORIZATION;
+    /// use http::{HeaderValue, Response};
+    /// use prost_reflect::prost_types::Timestamp;
+    /// use std::convert::Infallible;
+    /// use twurst_client::TwirpHttpClient;
+    /// use twurst_error::TwirpError;
+    ///
+    /// let client = TwirpHttpClient::new(tower::service_fn(|_request| async {
+    ///     Ok::<Response<String>, Infallible>(TwirpError::unimplemented("not implemented").into())
+    /// }));
+    /// // build a call with custom headers; `.send::<ResponseType>().await` dispatches it
+    /// let request = Timestamp::default();
+    /// let _pending = client
+    ///     .call_builder("/example.ExampleService/Test", &request)
+    ///     .header(AUTHORIZATION, HeaderValue::from_static("Bearer token"))
+    ///     .send::<Timestamp>();
+    /// ```
+    pub fn call_builder<'a, I: ReflectMessage>(
+        &'a self,
+        path: &'a str,
+        request: &'a I,
+    ) -> TwirpCallBuilder<'a, S, I> {
+        TwirpCallBuilder {
+            client: self,
+            path,
+            request,
+            headers: HeaderMap::new(),
+            error: None,
+        }
     }
 
     fn build_request<T: ReflectMessage>(
@@ -291,6 +298,101 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
         } else {
             Err(TwirpError::malformed("No content-type in the response"))
         }
+    }
+}
+
+/// Builder for a single Twirp call, returned by [`TwirpHttpClient::call_builder`].
+///
+/// Allows per-call customization (currently extra HTTP headers) before dispatching
+/// the request via [`Self::send`].
+#[must_use = "TwirpCallBuilder does nothing until `.send()` is awaited"]
+pub struct TwirpCallBuilder<'a, S: TwirpHttpService, I> {
+    client: &'a TwirpHttpClient<S>,
+    path: &'a str,
+    request: &'a I,
+    headers: HeaderMap,
+    error: Option<TwirpError>,
+}
+
+impl<'a, S: TwirpHttpService, I: ReflectMessage> TwirpCallBuilder<'a, S, I> {
+    /// Add a header to the outgoing request, replacing any existing header with the same name.
+    ///
+    /// If the name or value cannot be converted into a [`HeaderName`] / [`HeaderValue`],
+    /// the error is captured and surfaced when [`Self::send`] is awaited.
+    pub fn header<K, V>(mut self, name: K, value: V) -> Self
+    where
+        HeaderName: TryFrom<K>,
+        <HeaderName as TryFrom<K>>::Error: Into<http::Error>,
+        HeaderValue: TryFrom<V>,
+        <HeaderValue as TryFrom<V>>::Error: Into<http::Error>,
+    {
+        if self.error.is_some() {
+            return self;
+        }
+        let name = match HeaderName::try_from(name) {
+            Ok(name) => name,
+            Err(e) => {
+                let e: http::Error = e.into();
+                self.error = Some(TwirpError::wrap(
+                    TwirpErrorCode::Malformed,
+                    format!("Invalid header name: {e}"),
+                    e,
+                ));
+                return self;
+            }
+        };
+        let value = match HeaderValue::try_from(value) {
+            Ok(value) => value,
+            Err(e) => {
+                let e: http::Error = e.into();
+                self.error = Some(TwirpError::wrap(
+                    TwirpErrorCode::Malformed,
+                    format!("Invalid header value: {e}"),
+                    e,
+                ));
+                return self;
+            }
+        };
+        self.headers.insert(name, value);
+        self
+    }
+
+    /// Add multiple headers to the outgoing request, replacing existing values for the same names.
+    pub fn headers(mut self, headers: HeaderMap) -> Self {
+        self.headers.extend(headers);
+        self
+    }
+
+    /// Dispatch the configured Twirp call and decode the response.
+    pub async fn send<O: ReflectMessage + Default>(self) -> Result<O, TwirpError> {
+        if let Some(err) = self.error {
+            return Err(err);
+        }
+        let TwirpCallBuilder {
+            client,
+            path,
+            request,
+            headers,
+            ..
+        } = self;
+        // We ensure that the service is ready
+        client.service.ready().await.map_err(|e| {
+            TwirpError::wrap(
+                TwirpErrorCode::Unknown,
+                format!("Service is not ready: {e}"),
+                e,
+            )
+        })?;
+        let mut http_request = client.build_request(path, request)?;
+        http_request.headers_mut().extend(headers);
+        let response = client.service.call(http_request).await.map_err(|e| {
+            TwirpError::wrap(
+                TwirpErrorCode::Unknown,
+                format!("Transport error during the request: {e}"),
+                e,
+            )
+        })?;
+        client.extract_response(response).await
     }
 }
 
@@ -623,7 +725,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn request_with_per_call_headers_ok() -> Result<(), Box<dyn Error>> {
+    async fn call_builder_with_header_ok() -> Result<(), Box<dyn Error>> {
         let service = service_fn(|request: Request<TwirpRequestBody>| async move {
             assert_eq!(request.method(), Method::POST);
             assert_eq!(request.uri(), "/foo");
@@ -632,8 +734,53 @@ mod tests {
                 Some(&HeaderValue::from_static("Bearer token"))
             );
             assert_eq!(
+                request.headers().get("x-request-id"),
+                Some(&HeaderValue::from_static("abc-123"))
+            );
+            assert_eq!(
                 request.headers().get(CONTENT_TYPE),
                 Some(&APPLICATION_PROTOBUF)
+            );
+            Ok::<_, TwirpError>(
+                Response::builder()
+                    .header(CONTENT_TYPE, APPLICATION_JSON)
+                    .body("\"1970-01-01T00:00:10Z\"".to_string())
+                    .unwrap(),
+            )
+        });
+
+        let client = TwirpHttpClient::new(service);
+        let response: Timestamp = client
+            .call_builder(
+                "/foo",
+                &Timestamp {
+                    seconds: 10,
+                    nanos: 0,
+                },
+            )
+            .header(
+                http::header::AUTHORIZATION,
+                HeaderValue::from_static("Bearer token"),
+            )
+            .header("x-request-id", "abc-123")
+            .send()
+            .await?;
+        assert_eq!(
+            response,
+            Timestamp {
+                seconds: 10,
+                nanos: 0
+            }
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn call_builder_with_headers_map_ok() -> Result<(), Box<dyn Error>> {
+        let service = service_fn(|request: Request<TwirpRequestBody>| async move {
+            assert_eq!(
+                request.headers().get(http::header::AUTHORIZATION),
+                Some(&HeaderValue::from_static("Bearer token"))
             );
             Ok::<_, TwirpError>(
                 Response::builder()
@@ -649,23 +796,31 @@ mod tests {
             http::header::AUTHORIZATION,
             HeaderValue::from_static("Bearer token"),
         );
-        let response = client
-            .call_with_headers::<_, Timestamp>(
-                "/foo",
-                &Timestamp {
-                    seconds: 10,
-                    nanos: 0,
-                },
-                &headers,
-            )
+        let _response: Timestamp = client
+            .call_builder("/foo", &Timestamp::default())
+            .headers(headers)
+            .send()
             .await?;
-        assert_eq!(
-            response,
-            Timestamp {
-                seconds: 10,
-                nanos: 0
-            }
-        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn call_builder_invalid_header_name_surfaces_on_send() -> Result<(), Box<dyn Error>> {
+        let service = service_fn(|_: Request<TwirpRequestBody>| async move {
+            panic!("service must not be called when builder has a captured error");
+            #[allow(unreachable_code)]
+            Ok::<Response<String>, TwirpError>(Response::new(String::new()))
+        });
+
+        let client = TwirpHttpClient::new(service);
+        let err = client
+            .call_builder("/foo", &Timestamp::default())
+            .header("invalid header", "value")
+            .send::<Timestamp>()
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TwirpErrorCode::Malformed);
+        assert!(err.message().starts_with("Invalid header name"));
         Ok(())
     }
 
