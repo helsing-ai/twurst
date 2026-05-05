@@ -46,7 +46,7 @@ async fn main() {
 
 For per-call customization such as auth tokens or correlation IDs, use
 [`TwirpHttpClient::call_builder`](https://docs.rs/twurst-client/latest/twurst_client/struct.TwirpHttpClient.html#method.call_builder),
-which returns a builder with chainable `.header(...)` / `.headers(...)` methods and is dispatched with `.send()`:
+which returns a builder with a chainable `.header(...)` (and a `.headers_mut()` accessor for bulk edits) dispatched via `.send()`:
 ```rust,ignore
 use http::header::AUTHORIZATION;
 use http::HeaderValue;
