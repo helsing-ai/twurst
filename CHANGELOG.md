@@ -1,4 +1,12 @@
-## [0.3.4] - 2026-04-07
+## [0.3.4] - 2026-05-06 - client
+
+### Added
+- `TwirpCallBuilder` to customize headers in `twurst-client`
+
+### Changed
+- Multiple small deps bump (tokio ecosystem)
+
+## [0.3.4] - 2026-04-07 - build
 
 ### Added
 - `TwirpBuilder::skip_prost_reflect()` to enable custom `out_dir` support in `twurst-build`.
