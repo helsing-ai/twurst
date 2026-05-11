@@ -304,16 +304,16 @@ fn add_use_file_descriptor_to_file(file: &str) -> Result<String> {
 
 fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
     for item in items {
-        if let Item::Mod(module) = item {
-            if let Some((_, module_content)) = &mut module.content {
-                module_content.insert(
-                    0,
-                    parse_quote! {
-                        #[allow(unused_imports)]
-                        use super::FILE_DESCRIPTOR_SET_BYTES;
-                    },
-                );
-            }
+        if let Item::Mod(module) = item
+            && let Some((_, module_content)) = &mut module.content
+        {
+            module_content.insert(
+                0,
+                parse_quote! {
+                    #[allow(unused_imports)]
+                    use super::FILE_DESCRIPTOR_SET_BYTES;
+                },
+            );
         }
     }
 }

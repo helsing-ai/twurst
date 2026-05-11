@@ -379,13 +379,13 @@ impl From<TwirpErrorCode> for tonic_014::Code {
 impl From<TwirpError> for tonic_014::Status {
     #[inline]
     fn from(error: TwirpError) -> Self {
-        if let Some(source) = &error.source {
-            if let Some(status) = source.downcast_ref::<tonic_014::Status>() {
-                if status.code() == error.code().into() && status.message() == error.message() {
-                    // This is a status wrapped as a Twirp error, we reuse the status to keep the details
-                    return status.clone();
-                }
-            }
+        if let Some(source) = &error.source
+            && let Some(status) = source.downcast_ref::<tonic_014::Status>()
+            && status.code() == error.code().into()
+            && status.message() == error.message()
+        {
+            // This is a status wrapped as a Twirp error, we reuse the status to keep the details
+            return status.clone();
         }
         Self::new(error.code().into(), error.into_message())
     }
