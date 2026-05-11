@@ -4,6 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      tonic:
+        patterns:
+          - "tonic"       # matches the main entry
+          - "tonic-*"     # matches tonic-0XY (and any future aliases)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
