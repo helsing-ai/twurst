@@ -217,8 +217,7 @@ impl TwirpBuilder {
     ///
     /// When enabled, callers are responsible for configuring prost-reflect
     /// on the [`Config`] before passing it to [`from_prost`](Self::from_prost).
-    /// This is useful when using a custom `out_dir` or when using
-    /// `descriptor_pool` mode instead of `file_descriptor_set_bytes`.
+    /// This is useful when using a custom `out_dir`.
     pub fn skip_prost_reflect(mut self) -> Self {
         self.skip_prost_reflect = true;
         self
@@ -260,7 +259,7 @@ impl TwirpBuilder {
         // We configure with prost reflect
         if !self.skip_prost_reflect {
             prost_reflect_build::Builder::new()
-                .file_descriptor_set_bytes("self::FILE_DESCRIPTOR_SET_BYTES")
+                .descriptor_pool("self::DESCRIPTOR_POOL")
                 .configure(&mut self.config, protos, includes)?;
         }
 
@@ -297,7 +296,7 @@ fn add_use_file_descriptor_to_file(file: &str) -> Result<String> {
     let mut ast = syn::parse_file(file).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
     add_use_file_descriptor_to_nested_modules(&mut ast.items);
     ast.items.push(parse_quote! {
-        const FILE_DESCRIPTOR_SET_BYTES: &[u8] = include_bytes!("file_descriptor_set.bin");
+        static DESCRIPTOR_POOL: std::sync::LazyLock<prost_reflect::DescriptorPool> = std::sync::LazyLock::new(|| prost_reflect::DescriptorPool::decode(include_bytes!("file_descriptor_set.bin").as_slice()).unwrap());
     });
     Ok(unparse(&ast))
 }
@@ -311,7 +310,7 @@ fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
                 0,
                 parse_quote! {
                     #[allow(unused_imports)]
-                    use super::FILE_DESCRIPTOR_SET_BYTES;
+                    use super::DESCRIPTOR_POOL;
                 },
             );
         }

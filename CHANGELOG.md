@@ -1,4 +1,10 @@
-## [0.3.4] - 2026-05-06 - client
+## [0.3.6] - 2026-05-12 - build
+
+### Changed
+- Build: do not use the global `prost-reflect` `DescriptorPool` but setup one per `twurst_build` scope.
+  This allows to have conflicting versions of the same protobuf file in different crates but means that two different crates won't share there reflection data anymore (important especially when `Any` is used).
+
+## [0.3.5] - 2026-05-06 - client
 
 ### Added
 - `TwirpCallBuilder` to customize headers in `twurst-client`
