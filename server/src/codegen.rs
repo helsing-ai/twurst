@@ -50,12 +50,19 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
     pub fn route<
         I: ReflectMessage + Default,
         O: ReflectMessage,
-        F: Future<Output = Result<O, TwirpError>> + Send,
+        C: for<'a> AsyncFn(S, I, RequestParts, RS) -> Result<O, TwirpError>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
     >(
         mut self,
         path: &str,
-        call: impl (Fn(S, I, RequestParts, RS) -> F) + Clone + Send + Sync + 'static,
-    ) -> Self {
+        call: C,
+    ) -> Self
+    where
+        for<'a> <C as AsyncFnMut<(S, I, RequestParts, RS)>>::CallRefFuture<'a>: Send,
+    {
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -63,8 +70,8 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
                 move |State(state): State<RS>, request: Request| async move {
                     let (parts, body) = request.with_limited_body().into_parts();
                     let content_type = ContentType::from_headers(&parts.headers)?;
-                    let request = parse_request(content_type, body).await?;
-                    let response = call(service, request, parts, state).await?;
+                    let request: I = parse_request(content_type, body).await?;
+                    let response = call.async_call((service, request, parts, state)).await?;
                     serialize_response(content_type, response)
                 },
             ),
@@ -220,13 +227,19 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + Sync + 'static,
-        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+        C: for<'a> AsyncFn(S, I, RequestParts) -> Result<O, TwirpError>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
     >(
         mut self,
         path: &str,
         callback: C,
-    ) -> Self {
+    ) -> Self
+    where
+        for<'a> <C as AsyncFnMut<(S, I, RequestParts)>>::CallRefFuture<'a>: Send,
+    {
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -243,14 +256,20 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_server_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, I, RequestParts) -> F) + Clone + Send + Sync + 'static,
-        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        C: for<'a> AsyncFn(S, I, RequestParts) -> Result<OS, TwirpError>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
     >(
         mut self,
         path: &str,
         callback: C,
-    ) -> Self {
+    ) -> Self
+    where
+        for<'a> <C as AsyncFnMut<(S, I, RequestParts)>>::CallRefFuture<'a>: Send,
+    {
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -267,13 +286,19 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_client_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + Sync + 'static,
-        F: Future<Output = Result<O, TwirpError>> + Send + 'static,
+        C: for<'a> AsyncFn(S, GrpcClientStream<I>, RequestParts) -> Result<O, TwirpError>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
     >(
         mut self,
         path: &str,
         callback: C,
-    ) -> Self {
+    ) -> Self
+    where
+        for<'a> <C as AsyncFnMut<(S, GrpcClientStream<I>, RequestParts)>>::CallRefFuture<'a>: Send,
+    {
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -290,14 +315,20 @@ impl<S: Clone + Send + Sync + 'static> GrpcRouter<S> {
     pub fn route_streaming<
         I: ReflectMessage + Default + 'static,
         O: ReflectMessage + 'static,
-        C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + Sync + 'static,
-        F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
+        C: for<'a> AsyncFn(S, GrpcClientStream<I>, RequestParts) -> Result<OS, TwirpError>
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
     >(
         mut self,
         path: &str,
         callback: C,
-    ) -> Self {
+    ) -> Self
+    where
+        for<'a> <C as AsyncFnMut<(S, GrpcClientStream<I>, RequestParts)>>::CallRefFuture<'a>: Send,
+    {
         let service = self.service.clone();
         self.router = self.router.route(
             path,
@@ -324,32 +355,38 @@ struct GrpcService<S, C> {
 
 #[cfg(feature = "grpc")]
 impl<
-    S: Clone + Send + Sync + 'static,
-    I: ReflectMessage + Default + 'static,
-    O: ReflectMessage + 'static,
-    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-    F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-> tonic::server::UnaryService<I> for GrpcService<S, C>
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: for<'a> AsyncFn(S, I, RequestParts) -> Result<O, TwirpError> + Clone + Send + 'static,
+    > tonic::server::UnaryService<I> for GrpcService<S, C>
+where
+    for<'a> <C as AsyncFnMut<(S, I, RequestParts)>>::CallRefFuture<'a>: Send,
 {
     type Response = O;
     type Future = TonicResponseFuture<O>;
 
     fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
         let (request, parts) = grpc_to_twirp_request(request);
-        let result_future = (self.callback)(self.service.clone(), request, parts);
-        Box::pin(async move { Ok(tonic::Response::new(result_future.await?)) })
+        let service = self.service.clone();
+        let callback = self.callback.clone();
+        Box::pin(async move {
+            let result_future = callback.async_call((service, request, parts));
+            Ok(tonic::Response::new(result_future.await?))
+        })
     }
 }
 
 #[cfg(feature = "grpc")]
 impl<
-    S: Clone + Send + Sync + 'static,
-    I: ReflectMessage + Default + 'static,
-    O: ReflectMessage + 'static,
-    C: (Fn(S, I, RequestParts) -> F) + Clone + Send + 'static,
-    F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
-    OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
-> tonic::server::ServerStreamingService<I> for GrpcService<S, C>
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: for<'a> AsyncFn(S, I, RequestParts) -> Result<OS, TwirpError> + Clone + Send + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::ServerStreamingService<I> for GrpcService<S, C>
+where
+    for<'a> <C as AsyncFnMut<(S, I, RequestParts)>>::CallRefFuture<'a>: Send,
 {
     type Response = O;
     type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
@@ -357,8 +394,10 @@ impl<
 
     fn call(&mut self, request: tonic::Request<I>) -> Self::Future {
         let (request, parts) = grpc_to_twirp_request(request);
-        let result_future = (self.callback)(self.service.clone(), request, parts);
+        let service = self.service.clone();
+        let callback = self.callback.clone();
         Box::pin(async move {
+            let result_future = callback.async_call((service, request, parts));
             Ok(tonic::Response::new(
                 Box::pin(result_future.await?.map(|item| Ok(item?))) as Self::ResponseStream,
             ))
@@ -368,12 +407,16 @@ impl<
 
 #[cfg(feature = "grpc")]
 impl<
-    S: Clone + Send + Sync + 'static,
-    I: ReflectMessage + Default + 'static,
-    O: ReflectMessage + 'static,
-    C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
-    F: Future<Output = Result<O, TwirpError>> + Send + 'static,
-> tonic::server::ClientStreamingService<I> for GrpcService<S, C>
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: for<'a> AsyncFn(S, GrpcClientStream<I>, RequestParts) -> Result<O, TwirpError>
+            + Clone
+            + Send
+            + 'static,
+    > tonic::server::ClientStreamingService<I> for GrpcService<S, C>
+where
+    for<'a> <C as AsyncFnMut<(S, GrpcClientStream<I>, RequestParts)>>::CallRefFuture<'a>: Send,
 {
     type Response = O;
     type Future = TonicResponseFuture<Self::Response>;
@@ -381,20 +424,28 @@ impl<
     fn call(&mut self, request: tonic::Request<tonic::Streaming<I>>) -> Self::Future {
         let (request, parts) = grpc_to_twirp_request(request);
         let request = GrpcClientStream { stream: request };
-        let result_future = (self.callback)(self.service.clone(), request, parts);
-        Box::pin(async move { Ok(tonic::Response::new(result_future.await?)) })
+        let service = self.service.clone();
+        let callback = self.callback.clone();
+        Box::pin(async move {
+            let result_future = callback.async_call((service, request, parts));
+            Ok(tonic::Response::new(result_future.await?))
+        })
     }
 }
 
 #[cfg(feature = "grpc")]
 impl<
-    S: Clone + Send + Sync + 'static,
-    I: ReflectMessage + Default + 'static,
-    O: ReflectMessage + 'static,
-    C: (Fn(S, GrpcClientStream<I>, RequestParts) -> F) + Clone + Send + 'static,
-    F: Future<Output = Result<OS, TwirpError>> + Send + 'static,
-    OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
-> tonic::server::StreamingService<I> for GrpcService<S, C>
+        S: Clone + Send + Sync + 'static,
+        I: ReflectMessage + Default + 'static,
+        O: ReflectMessage + 'static,
+        C: for<'a> AsyncFn(S, GrpcClientStream<I>, RequestParts) -> Result<OS, TwirpError>
+            + Clone
+            + Send
+            + 'static,
+        OS: Stream<Item = Result<O, TwirpError>> + Send + 'static,
+    > tonic::server::StreamingService<I> for GrpcService<S, C>
+where
+    for<'a> <C as AsyncFnMut<(S, GrpcClientStream<I>, RequestParts)>>::CallRefFuture<'a>: Send,
 {
     type Response = O;
     type ResponseStream = Pin<Box<dyn Stream<Item = Result<O, tonic::Status>> + Send>>;
@@ -403,8 +454,10 @@ impl<
     fn call(&mut self, request: tonic::Request<tonic::Streaming<I>>) -> Self::Future {
         let (request, parts) = grpc_to_twirp_request(request);
         let request = GrpcClientStream { stream: request };
-        let result_future = (self.callback)(self.service.clone(), request, parts);
+        let service = self.service.clone();
+        let callback = self.callback.clone();
         Box::pin(async move {
+            let result_future = callback.async_call((service, request, parts));
             Ok(tonic::Response::new(
                 Box::pin(result_future.await?.map(|item| Ok(item?))) as Self::ResponseStream,
             ))
@@ -524,7 +577,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let response = router
@@ -550,7 +603,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let response = router
@@ -577,7 +630,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let response = router
@@ -604,7 +657,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let mut service = router.into_service();
@@ -637,7 +690,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let response = router
@@ -664,7 +717,7 @@ mod tests {
         let router = TwirpRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _, _| async move { Ok(request) },
+                async |(), request: MyMessage, _, _| Ok(request),
             )
             .build();
         let response = router
@@ -692,7 +745,7 @@ mod tests {
         let router = GrpcRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), request: MyMessage, _| async move { Ok(request) },
+                async |(), request: MyMessage, _| Ok(request),
             )
             .build();
         let path = PathAndQuery::from_static("/package.MyService/MyMethod");
@@ -714,7 +767,7 @@ mod tests {
         let router = GrpcRouter::new(())
             .route(
                 "/package.MyService/MyMethod",
-                |(), _: MyMessage, _| async move {
+                async |(), _: MyMessage, _| {
                     Err::<MyMessage, _>(TwirpError::not_found("foo not found"))
                 },
             )
