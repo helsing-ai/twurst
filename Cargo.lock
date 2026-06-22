@@ -924,7 +924,7 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tower",
- "tower-http",
+ "tower-http 0.6.11",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -953,7 +953,7 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tower",
- "tower-http",
+ "tower-http 0.6.11",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -1300,18 +1300,33 @@ version = "0.6.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
 dependencies = [
- "base64",
  "bitflags",
  "bytes",
  "futures-util",
  "http",
  "http-body",
- "mime",
  "pin-project-lite",
  "tower",
  "tower-layer",
  "tower-service",
  "url",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b11f75e912b0c2be01b63d8cf8057b8c3f97cf34abb3d431a3a4c8675498e233"
+dependencies = [
+ "base64",
+ "bitflags",
+ "bytes",
+ "http",
+ "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]
@@ -1440,7 +1455,7 @@ dependencies = [
  "prost-reflect",
  "prost-types",
  "tokio",
- "tower-http",
+ "tower-http 0.7.0",
  "twurst-build",
  "twurst-server",
 ]
@@ -1461,7 +1476,7 @@ dependencies = [
  "tonic-prost",
  "tonic-prost-build",
  "tower",
- "tower-http",
+ "tower-http 0.7.0",
  "twurst-build",
  "twurst-client",
  "twurst-server",
