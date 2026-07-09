@@ -313,6 +313,7 @@ fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
                     use super::DESCRIPTOR_POOL;
                 },
             );
+            add_use_file_descriptor_to_nested_modules(module_content);
         }
     }
 }
