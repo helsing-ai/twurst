@@ -620,3 +620,26 @@ fn quote_comments(comments: &Comments) -> Vec<TokenStream> {
         .map(|c| quote! { #[doc = #c] })
         .collect::<Vec<_>>()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn injects_descriptor_pool_into_nested_modules() {
+        let input = "mod a { mod b { mod c { } } }";
+        let output = add_use_file_descriptor_to_file(input).unwrap();
+
+        assert_eq!(
+            output.matches("use super::DESCRIPTOR_POOL;").count(),
+            3,
+            "expected `use super::DESCRIPTOR_POOL;` in both nested modules, got:\n{output}"
+        );
+
+        assert_eq!(
+            output.matches("static DESCRIPTOR_POOL").count(),
+            1,
+            "expected a single DESCRIPTOR_POOL declaration, got:\n{output}"
+        );
+    }
+}
