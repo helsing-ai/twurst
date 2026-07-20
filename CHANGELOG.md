@@ -1,3 +1,8 @@
+## [0.3.7] - 2026-07-20 - build
+
+### Changed
+- Fix usage of `prost-reflect` `DescriptorPool` in nested inline modules.
+
 ## [0.3.6] - 2026-05-12 - build
 
 ### Changed
