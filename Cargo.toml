@@ -37,7 +37,7 @@ reqwest-012 = { package = "reqwest", version = "0.12", default-features = false 
 reqwest-013 = { package = "reqwest", version = "0.13", default-features = false }
 serde = "1.0.228"
 serde_json = "1"
-syn = "2.0.81"
+syn = "3.0.2"
 tokio = "1.52"
 tokio-stream = "0.1.18"
 tonic = { version = "0.14.6", default-features = false }
