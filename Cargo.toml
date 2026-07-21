@@ -24,8 +24,8 @@ http = "1.4.1"
 http-body = "1"
 http-body-util = "0.1.2"
 pin-project-lite = "0.2.17"
-prettyplease = "0.2"
-proc-macro2 = "1.0.83"
+prettyplease = "0.3"
+proc-macro2 = "1.0.91"
 prost = "0.14"
 prost-types = "0.14"
 prost-build = "0.14"
@@ -37,7 +37,7 @@ reqwest-012 = { package = "reqwest", version = "0.12", default-features = false 
 reqwest-013 = { package = "reqwest", version = "0.13", default-features = false }
 serde = "1.0.228"
 serde_json = "1"
-syn = "2.0.81"
+syn = { version = "3.0.2", features = ["full"] }
 tokio = "1.52"
 tokio-stream = "0.1.18"
 tonic = { version = "0.14.6", default-features = false }
