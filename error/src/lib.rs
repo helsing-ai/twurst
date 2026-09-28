@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// A Twirp [error](https://twitchtv.github.io/twirp/docs/spec_v7.html#errors)
@@ -190,7 +191,7 @@ impl TwirpError {
 impl fmt::Display for TwirpError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Twirp {:?} error: {}", self.code, self.msg)
+        write!(f, "Twirp {} error: {}", self.code, self.msg)
     }
 }
 
@@ -212,8 +213,6 @@ impl Eq for TwirpError {}
 
 /// A Twirp [error code](https://twitchtv.github.io/twirp/docs/spec_v7.html#error-codes)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum TwirpErrorCode {
     /// The operation was cancelled.
     Canceled,
@@ -251,6 +250,120 @@ pub enum TwirpErrorCode {
     Unavailable,
     /// The operation resulted in unrecoverable data loss or corruption.
     Dataloss,
+}
+
+impl TwirpErrorCode {
+    #[inline]
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Canceled => "canceled",
+            Self::Unknown => "unknown",
+            Self::InvalidArgument => "invalid_argument",
+            Self::Malformed => "malformed",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::NotFound => "not_found",
+            Self::BadRoute => "bad_route",
+            Self::AlreadyExists => "already_exists",
+            Self::PermissionDenied => "permission_denied",
+            Self::Unauthenticated => "unauthenticated",
+            Self::ResourceExhausted => "resource_exhausted",
+            Self::FailedPrecondition => "failed_precondition",
+            Self::Aborted => "aborted",
+            Self::OutOfRange => "out_of_range",
+            Self::Unimplemented => "unimplemented",
+            Self::Internal => "internal",
+            Self::Unavailable => "unavailable",
+            Self::Dataloss => "dataloss",
+        }
+    }
+}
+
+impl fmt::Display for TwirpErrorCode {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for TwirpErrorCode {
+    type Err = UnsupportedTwirpErrorCode;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, UnsupportedTwirpErrorCode> {
+        match s {
+            "canceled" => Ok(Self::Canceled),
+            "unknown" => Ok(Self::Unknown),
+            "invalid_argument" => Ok(Self::InvalidArgument),
+            "malformed" => Ok(Self::Malformed),
+            "deadline_exceeded" => Ok(Self::DeadlineExceeded),
+            "not_found" => Ok(Self::NotFound),
+            "bad_route" => Ok(Self::BadRoute),
+            "already_exists" => Ok(Self::AlreadyExists),
+            "permission_denied" => Ok(Self::PermissionDenied),
+            "unauthenticated" => Ok(Self::Unauthenticated),
+            "resource_exhausted" => Ok(Self::ResourceExhausted),
+            "failed_precondition" => Ok(Self::FailedPrecondition),
+            "aborted" => Ok(Self::Aborted),
+            "out_of_range" => Ok(Self::OutOfRange),
+            "unimplemented" => Ok(Self::Unimplemented),
+            "internal" => Ok(Self::Internal),
+            "unavailable" => Ok(Self::Unavailable),
+            "dataloss" => Ok(Self::Dataloss),
+            _ => Err(UnsupportedTwirpErrorCode {}),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnsupportedTwirpErrorCode {}
+
+impl fmt::Display for UnsupportedTwirpErrorCode {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Unsupported Twirp error code")
+    }
+}
+
+impl Error for UnsupportedTwirpErrorCode {}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for TwirpErrorCode {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.as_str().serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for TwirpErrorCode {
+    #[inline]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ErrorCodeVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for ErrorCodeVisitor {
+            type Value = TwirpErrorCode;
+
+            #[inline]
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a Twirp error code")
+            }
+
+            #[inline]
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<TwirpErrorCode, E> {
+                value
+                    .parse()
+                    .map_err(|_| E::invalid_value(serde::de::Unexpected::Str(value), &self))
+            }
+        }
+
+        deserializer.deserialize_identifier(ErrorCodeVisitor)
+    }
 }
 
 /// Applies the mapping defined in [Twirp spec](https://twitchtv.github.io/twirp/docs/spec_v7.html#error-codes)
@@ -437,6 +550,48 @@ mod tests {
         assert_eq!(error.code(), TwirpErrorCode::InvalidArgument);
         assert_eq!(error.message(), "foo is wrong");
         assert_eq!(error.meta("foo"), Some("bar"));
+    }
+
+    #[test]
+    fn test_error_code_strings() {
+        for (code, name) in [
+            (TwirpErrorCode::Canceled, "canceled"),
+            (TwirpErrorCode::Unknown, "unknown"),
+            (TwirpErrorCode::InvalidArgument, "invalid_argument"),
+            (TwirpErrorCode::Malformed, "malformed"),
+            (TwirpErrorCode::DeadlineExceeded, "deadline_exceeded"),
+            (TwirpErrorCode::NotFound, "not_found"),
+            (TwirpErrorCode::BadRoute, "bad_route"),
+            (TwirpErrorCode::AlreadyExists, "already_exists"),
+            (TwirpErrorCode::PermissionDenied, "permission_denied"),
+            (TwirpErrorCode::Unauthenticated, "unauthenticated"),
+            (TwirpErrorCode::ResourceExhausted, "resource_exhausted"),
+            (TwirpErrorCode::FailedPrecondition, "failed_precondition"),
+            (TwirpErrorCode::Aborted, "aborted"),
+            (TwirpErrorCode::OutOfRange, "out_of_range"),
+            (TwirpErrorCode::Unimplemented, "unimplemented"),
+            (TwirpErrorCode::Internal, "internal"),
+            (TwirpErrorCode::Unavailable, "unavailable"),
+            (TwirpErrorCode::Dataloss, "dataloss"),
+        ] {
+            assert_eq!(code.to_string(), name);
+            assert_eq!(name.parse::<TwirpErrorCode>().unwrap(), code);
+        }
+
+        assert!("not-a-code".parse::<TwirpErrorCode>().is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde() {
+        assert_eq!(
+            serde_json::to_string(&TwirpErrorCode::Aborted).unwrap(),
+            "\"aborted\""
+        );
+        assert_eq!(
+            serde_json::from_str::<TwirpErrorCode>("\"aborted\"").unwrap(),
+            TwirpErrorCode::Aborted
+        );
     }
 
     #[cfg(feature = "http")]

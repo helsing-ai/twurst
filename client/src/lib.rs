@@ -654,7 +654,7 @@ mod tests {
                 .await
                 .unwrap_err()
                 .to_string(),
-            "Twirp Unknown error: Service is not ready: Twirp Internal error: foo"
+            "Twirp unknown error: Service is not ready: Twirp internal error: foo"
         );
         Ok(())
     }
