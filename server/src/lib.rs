@@ -5,6 +5,8 @@
     html_logo_url = "https://raw.githubusercontent.com/helsing-ai/twurst/main/docs/img/twurst.png"
 )]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![feature(async_fn_traits)]
+#![feature(unboxed_closures)]
 
 #[doc(hidden)]
 pub mod codegen;
