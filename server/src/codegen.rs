@@ -4,11 +4,9 @@ pub use axum::Router;
 use axum::body::Body;
 pub use axum::extract::FromRequestParts;
 use axum::extract::{Request, State};
-#[cfg(feature = "grpc")]
-use axum::http::Method;
 use axum::http::header::CONTENT_TYPE;
 pub use axum::http::request::Parts as RequestParts;
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::{HeaderMap, HeaderValue, Method, Uri};
 pub use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::post;
