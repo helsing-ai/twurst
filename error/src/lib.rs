@@ -389,7 +389,7 @@ impl From<TwirpErrorCode> for http::StatusCode {
             TwirpErrorCode::Unimplemented => Self::NOT_IMPLEMENTED,
             TwirpErrorCode::Internal => Self::INTERNAL_SERVER_ERROR,
             TwirpErrorCode::Unavailable => Self::SERVICE_UNAVAILABLE,
-            TwirpErrorCode::Dataloss => Self::SERVICE_UNAVAILABLE,
+            TwirpErrorCode::Dataloss => Self::INTERNAL_SERVER_ERROR,
         }
     }
 }
