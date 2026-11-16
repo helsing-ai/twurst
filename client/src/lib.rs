@@ -255,7 +255,7 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
         let body = body.collect().await.map_err(|e| {
             TwirpError::wrap(
                 TwirpErrorCode::Internal,
-                format!("Failed to load request body: {e}"),
+                format!("Failed to load response body: {e}"),
                 e,
             )
         })?;
