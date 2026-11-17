@@ -16,6 +16,7 @@ use serde::Serialize;
 use std::convert::Infallible;
 use std::error::Error;
 use std::future::poll_fn;
+use std::io;
 use std::mem::take;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -252,13 +253,10 @@ impl<S: TwirpHttpService> TwirpHttpClient<S> {
         // We collect the body
         // TODO: size limit
         let (parts, body) = response.into_parts();
-        let body = body.collect().await.map_err(|e| {
-            TwirpError::wrap(
-                TwirpErrorCode::Internal,
-                format!("Failed to load response body: {e}"),
-                e,
-            )
-        })?;
+        let body = body
+            .collect()
+            .await
+            .map_err(|e| wrap_transport_error(format!("Failed to load response body: {e}"), e))?;
         let response = Response::from_parts(parts, body);
 
         // Error
@@ -335,13 +333,11 @@ impl<'a, S: TwirpHttpService, I: ReflectMessage> TwirpCallBuilder<'a, S, I> {
             mut builder,
         } = self;
         // We ensure that the service is ready
-        client.service.ready().await.map_err(|e| {
-            TwirpError::wrap(
-                TwirpErrorCode::Unknown,
-                format!("Service is not ready: {e}"),
-                e,
-            )
-        })?;
+        client
+            .service
+            .ready()
+            .await
+            .map_err(|e| wrap_transport_error(format!("Service is not ready: {e}"), e))?;
         let body = client.encode_body(request)?;
         // Force-set Content-Type after any user-supplied headers so the framework value wins.
         if let Some(headers) = builder.headers_mut() {
@@ -355,11 +351,7 @@ impl<'a, S: TwirpHttpService, I: ReflectMessage> TwirpCallBuilder<'a, S, I> {
             )
         })?;
         let response = client.service.call(http_request).await.map_err(|e| {
-            TwirpError::wrap(
-                TwirpErrorCode::Unknown,
-                format!("Transport error during the request: {e}"),
-                e,
-            )
+            wrap_transport_error(format!("Transport error during the request: {e}"), e)
         })?;
         client.extract_response(response).await
     }
@@ -501,6 +493,87 @@ fn dynamic_json_decode<T: ReflectMessage + Default>(
     Ok(dynamic_message)
 }
 
+fn wrap_transport_error(message: String, error: impl Error + Send + Sync + 'static) -> TwirpError {
+    TwirpError::wrap(transport_error_code(&error), message, error)
+}
+
+fn transport_error_code(error: &(dyn Error + 'static)) -> TwirpErrorCode {
+    // We only trust the top-level error: a deeply nested Twirp error might be unrelated context
+    if let Some(error) = error.downcast_ref::<TwirpError>() {
+        return error.code();
+    }
+    let mut current = Some(error);
+    while let Some(error) = current {
+        #[cfg(feature = "reqwest-012")]
+        if let Some(code) = error
+            .downcast_ref::<reqwest_012::Error>()
+            .and_then(reqwest_012_error_code)
+        {
+            return code;
+        }
+        #[cfg(feature = "reqwest-013")]
+        if let Some(code) = error
+            .downcast_ref::<reqwest_013::Error>()
+            .and_then(reqwest_013_error_code)
+        {
+            return code;
+        }
+        if let Some(error) = error.downcast_ref::<io::Error>() {
+            if let Some(code) = io_error_code(error) {
+                return code;
+            }
+            if let Some(inner) = error.get_ref() {
+                current = Some(inner);
+                continue;
+            }
+        }
+        current = error.source();
+    }
+    TwirpErrorCode::Unknown
+}
+
+fn io_error_code(error: &io::Error) -> Option<TwirpErrorCode> {
+    match error.kind() {
+        io::ErrorKind::TimedOut => Some(TwirpErrorCode::DeadlineExceeded),
+        // We do not map errors like ConnectionReset or BrokenPipe because they might happen
+        // after the server has processed the request, making a retry unsafe
+        io::ErrorKind::ConnectionRefused
+        | io::ErrorKind::HostUnreachable
+        | io::ErrorKind::NetworkUnreachable => Some(TwirpErrorCode::Unavailable),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "reqwest-012")]
+fn reqwest_012_error_code(error: &reqwest_012::Error) -> Option<TwirpErrorCode> {
+    if error.is_timeout() {
+        return Some(TwirpErrorCode::DeadlineExceeded);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if error.is_connect() {
+        return Some(TwirpErrorCode::Unavailable);
+    }
+    if error.is_builder() {
+        return Some(TwirpErrorCode::Malformed);
+    }
+    None
+}
+
+#[cfg(feature = "reqwest-013")]
+fn reqwest_013_error_code(error: &reqwest_013::Error) -> Option<TwirpErrorCode> {
+    if error.is_timeout() {
+        return Some(TwirpErrorCode::DeadlineExceeded);
+    }
+    #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+    if error.is_connect() {
+        return Some(TwirpErrorCode::Unavailable);
+    }
+    if error.is_builder() {
+        return Some(TwirpErrorCode::Malformed);
+    }
+    None
+}
+
 /// Wraps a [`reqwest::Client`](reqwest_012::Client) into a [`tower::Service`](Service) compatible with [`TwirpHttpClient`].
 #[cfg(feature = "reqwest-012")]
 #[derive(Clone, Default)]
@@ -609,7 +682,6 @@ mod tests {
     use prost_reflect::prost::Message;
     use prost_reflect::prost_types::Timestamp;
     use std::future::Ready;
-    use std::io;
     use std::task::{Context, Poll};
     use tower::service_fn;
 
@@ -654,7 +726,7 @@ mod tests {
                 .await
                 .unwrap_err()
                 .to_string(),
-            "Twirp unknown error: Service is not ready: Twirp internal error: foo"
+            "Twirp internal error: Service is not ready: Twirp internal error: foo"
         );
         Ok(())
     }
@@ -970,6 +1042,19 @@ mod tests {
                 "Transport error during the request: Transport error"
             )
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn request_io_timeout_error() -> Result<(), Box<dyn Error>> {
+        let service = service_fn(|_: Request<TwirpRequestBody>| async move {
+            Err::<Response<String>, _>(io::Error::new(io::ErrorKind::TimedOut, "timed out"))
+        });
+        let response_error = TwirpHttpClient::new(service)
+            .call::<_, Timestamp>("/foo", &Timestamp::default())
+            .await
+            .unwrap_err();
+        assert_eq!(response_error.code(), TwirpErrorCode::DeadlineExceeded);
         Ok(())
     }
 
