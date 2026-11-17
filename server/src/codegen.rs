@@ -4,11 +4,9 @@ pub use axum::Router;
 use axum::body::Body;
 pub use axum::extract::FromRequestParts;
 use axum::extract::{Request, State};
-#[cfg(feature = "grpc")]
-use axum::http::Method;
 use axum::http::header::CONTENT_TYPE;
 pub use axum::http::request::Parts as RequestParts;
-use axum::http::{HeaderMap, HeaderValue};
+use axum::http::{HeaderMap, HeaderValue, Method, Uri};
 pub use axum::response::IntoResponse;
 use axum::response::Response;
 use axum::routing::post;
@@ -67,7 +65,8 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
                     let response = call(service, request, parts, state).await?;
                     serialize_response(content_type, response)
                 },
-            ),
+            )
+            .fallback(method_not_allowed),
         );
         self
     }
@@ -77,7 +76,8 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
             path,
             post(move || async move {
                 TwirpError::unimplemented("Streaming is not supported by Twirp")
-            }),
+            })
+            .fallback(method_not_allowed),
         );
         self
     }
@@ -85,6 +85,16 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
     pub fn build(self) -> Router<RS> {
         self.router
     }
+}
+
+async fn method_not_allowed(method: Method, uri: Uri) -> TwirpError {
+    TwirpError::new(
+        TwirpErrorCode::BadRoute,
+        format!(
+            "Unsupported method {method} for {} (only POST is allowed)",
+            uri.path()
+        ),
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -516,6 +526,32 @@ mod tests {
         assert_eq!(
             response.into_body().collect().await.unwrap().to_bytes(),
             b"{\"code\":\"bad_route\",\"msg\":\"/ is not a supported Twirp method\"}".as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_wrong_method() {
+        let router = TwirpRouter::new(())
+            .route(
+                "/package.MyService/MyMethod",
+                |(), request: MyMessage, _, _| async move { Ok(request) },
+            )
+            .build();
+        let response = router
+            .into_service()
+            .call(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/package.MyService/MyMethod")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            b"{\"code\":\"bad_route\",\"msg\":\"Unsupported method GET for /package.MyService/MyMethod (only POST is allowed)\"}".as_slice()
         );
     }
 
