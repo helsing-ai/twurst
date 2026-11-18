@@ -88,10 +88,8 @@ impl TwirpError {
         e: impl Error + Send + Sync + 'static,
     ) -> Self {
         Self {
-            code,
-            msg: msg.into(),
-            meta: HashMap::new(),
             source: Some(Arc::new(e)),
+            ..Self::new(code, msg)
         }
     }
 
@@ -422,32 +420,20 @@ impl<B: AsRef<[u8]>> From<http::Response<B>> for TwirpError {
             return error;
         }
         // We don't have a Twirp error, we build a fallback
-        let code = if status == http::StatusCode::REQUEST_TIMEOUT {
-            TwirpErrorCode::DeadlineExceeded
-        } else if status == http::StatusCode::FORBIDDEN {
-            TwirpErrorCode::PermissionDenied
-        } else if status == http::StatusCode::UNAUTHORIZED {
-            TwirpErrorCode::Unauthenticated
-        } else if status == http::StatusCode::TOO_MANY_REQUESTS {
-            TwirpErrorCode::ResourceExhausted
-        } else if status == http::StatusCode::PRECONDITION_FAILED {
-            TwirpErrorCode::FailedPrecondition
-        } else if status == http::StatusCode::NOT_IMPLEMENTED {
-            TwirpErrorCode::Unimplemented
-        } else if status == http::StatusCode::TOO_MANY_REQUESTS
-            || status == http::StatusCode::BAD_GATEWAY
-            || status == http::StatusCode::SERVICE_UNAVAILABLE
-            || status == http::StatusCode::GATEWAY_TIMEOUT
-        {
-            TwirpErrorCode::Unavailable
-        } else if status == http::StatusCode::NOT_FOUND {
-            TwirpErrorCode::NotFound
-        } else if status.is_server_error() {
-            TwirpErrorCode::Internal
-        } else if status.is_client_error() {
-            TwirpErrorCode::Malformed
-        } else {
-            TwirpErrorCode::Unknown
+        let code = match status {
+            http::StatusCode::REQUEST_TIMEOUT => TwirpErrorCode::DeadlineExceeded,
+            http::StatusCode::FORBIDDEN => TwirpErrorCode::PermissionDenied,
+            http::StatusCode::UNAUTHORIZED => TwirpErrorCode::Unauthenticated,
+            http::StatusCode::TOO_MANY_REQUESTS => TwirpErrorCode::ResourceExhausted,
+            http::StatusCode::PRECONDITION_FAILED => TwirpErrorCode::FailedPrecondition,
+            http::StatusCode::NOT_IMPLEMENTED => TwirpErrorCode::Unimplemented,
+            http::StatusCode::BAD_GATEWAY
+            | http::StatusCode::SERVICE_UNAVAILABLE
+            | http::StatusCode::GATEWAY_TIMEOUT => TwirpErrorCode::Unavailable,
+            http::StatusCode::NOT_FOUND => TwirpErrorCode::NotFound,
+            _ if status.is_server_error() => TwirpErrorCode::Internal,
+            _ if status.is_client_error() => TwirpErrorCode::Malformed,
+            _ => TwirpErrorCode::Unknown,
         };
         TwirpError::new(code, String::from_utf8_lossy(body.as_ref()))
     }

@@ -10,7 +10,7 @@ use self::proto_path_map::ProtoPathMap;
 use prettyplease::unparse;
 use proc_macro2::TokenStream;
 pub use prost_build as prost;
-use prost_build::{Comments, Config, Module, Service, ServiceGenerator};
+use prost_build::{Comments, Config, Method, Module, Service, ServiceGenerator};
 use quote::{format_ident, quote};
 use std::collections::HashSet;
 use std::fmt::Write;
@@ -42,27 +42,25 @@ impl TwirpBuilder {
     pub fn from_prost(config: Config) -> Self {
         Self {
             config,
-            generator: TwirpServiceGenerator::new(),
-            type_name_domain: None,
-            skip_prost_reflect: false,
+            ..Self::default()
         }
     }
 
     /// Generates code for the Twirp client.
     pub fn with_client(mut self) -> Self {
-        self.generator = self.generator.with_client();
+        self.generator.client = true;
         self
     }
 
     /// Generates code for the Twirp server.
     pub fn with_server(mut self) -> Self {
-        self.generator = self.generator.with_server();
+        self.generator.server = true;
         self
     }
 
     /// Generates code for gRPC alongside Twirp.
     pub fn with_grpc(mut self) -> Self {
-        self.generator = self.generator.with_grpc();
+        self.generator.grpc = true;
         self
     }
 
@@ -103,9 +101,9 @@ impl TwirpBuilder {
         name: impl Into<String>,
         type_name: impl Into<String>,
     ) -> Self {
-        self.generator = self
-            .generator
-            .with_default_axum_request_extractor(name, type_name);
+        self.generator
+            .default_request_extractors
+            .push((name.into(), type_name.into()));
         self
     }
 
@@ -205,11 +203,9 @@ impl TwirpBuilder {
         type_name: impl Into<String>,
         service_path: impl Into<String>,
     ) -> Self {
-        self.generator = self.generator.with_service_specific_axum_request_extractor(
-            name,
-            type_name,
-            service_path,
-        );
+        self.generator
+            .matched_request_extractors
+            .insert(service_path.into(), (name.into(), type_name.into()));
         self
     }
 
@@ -278,7 +274,7 @@ impl TwirpBuilder {
         // We add the file descriptor to every file to make reflection work automatically
         if !self.skip_prost_reflect {
             for module in modules {
-                let file_path = Path::new(&out_dir).join(module.to_file_name_or("_"));
+                let file_path = out_dir.join(module.to_file_name_or("_"));
                 if !file_path.exists() {
                     continue; // We ignore not built files
                 }
@@ -318,13 +314,7 @@ fn add_use_file_descriptor_to_nested_modules(items: &mut Vec<Item>) {
     }
 }
 
-/// Low level generator for Twirp related code.
-///
-/// This only useful if you want to customize builds. For common use cases, please use [`TwirpBuilder`].
-///
-/// Should be given to [`Config::service_generator`].
-///
-/// Client and server are not enabled by defaults and must be enabled with the [`with_client`](Self::with_client) and [`with_server`](Self::with_server) methods.
+/// Generates Twirp clients and servers, given to [`Config::service_generator`] by [`TwirpBuilder`].
 #[derive(Default)]
 struct TwirpServiceGenerator {
     client: bool,
@@ -334,49 +324,6 @@ struct TwirpServiceGenerator {
     default_request_extractors: Vec<(String, String)>,
     // stores an extractor for a proto path as (argument_name, extractor_type)
     matched_request_extractors: ProtoPathMap<(String, String)>,
-}
-
-impl TwirpServiceGenerator {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_client(mut self) -> Self {
-        self.client = true;
-        self
-    }
-
-    pub fn with_server(mut self) -> Self {
-        self.server = true;
-        self
-    }
-
-    pub fn with_grpc(mut self) -> Self {
-        self.grpc = true;
-        self
-    }
-
-    pub fn with_default_axum_request_extractor(
-        mut self,
-        name: impl Into<String>,
-        type_name: impl Into<String>,
-    ) -> Self {
-        self.default_request_extractors
-            .push((name.into(), type_name.into()));
-        self
-    }
-
-    // This will override any and all default extractors, but only for the services which match service_proto_path.
-    pub fn with_service_specific_axum_request_extractor(
-        mut self,
-        name: impl Into<String>,
-        type_name: impl Into<String>,
-        service_proto_path: impl Into<String>,
-    ) -> Self {
-        self.matched_request_extractors
-            .insert(service_proto_path.into(), (name.into(), type_name.into()));
-        self
-    }
 }
 
 impl ServiceGenerator for TwirpServiceGenerator {
@@ -400,15 +347,18 @@ impl ServiceGenerator for TwirpServiceGenerator {
             .map(|(_, t)| t.parse().unwrap())
             .collect::<Vec<TokenStream>>();
 
+        let route = |method: &Method| {
+            format!(
+                "/{}.{}/{}",
+                service.package, service.proto_name, method.proto_name
+            )
+        };
+
         let mut output = TokenStream::new();
         if self.client {
             let client_name = format_ident!("{}Client", service.name);
             let service_docs = quote_comments(&service.comments);
-            let service_deprecated = if service.options.deprecated.unwrap_or(false) {
-                Some(quote! { #[deprecated] })
-            } else {
-                None
-            };
+            let service_deprecated = quote_deprecated(service.options.deprecated);
 
             let method_tokens = service
                 .methods
@@ -418,16 +368,9 @@ impl ServiceGenerator for TwirpServiceGenerator {
                     let method_ident = format_ident!("{}", method.name);
                     let input_type: TokenStream = method.input_type.parse().unwrap();
                     let output_type: TokenStream = method.output_type.parse().unwrap();
-                    let route = format!(
-                        "/{}.{}/{}",
-                        service.package, service.proto_name, method.proto_name
-                    );
+                    let route = route(method);
                     let method_docs = quote_comments(&method.comments);
-                    let method_deprecated = if method.options.deprecated.unwrap_or(false) {
-                        quote! { #[deprecated] }
-                    } else {
-                        quote! {}
-                    };
+                    let method_deprecated = quote_deprecated(method.options.deprecated);
                     quote! {
                         #(#method_docs)*
                         #method_deprecated
@@ -497,10 +440,7 @@ impl ServiceGenerator for TwirpServiceGenerator {
                 .methods
                 .iter()
                 .map(|method| {
-                    let route = format!(
-                        "/{}.{}/{}",
-                        service.package, service.proto_name, method.proto_name
-                    );
+                    let route = route(method);
                     let method_ident = format_ident!("{}", method.name);
                     let input_type: TokenStream = method.input_type.parse().unwrap();
 
@@ -519,12 +459,11 @@ impl ServiceGenerator for TwirpServiceGenerator {
                             )
                         };
 
-                        let ext_types = extractor_types.clone();
-
+                        // The error branch is unreachable for extractors with an infallible rejection like HeaderMap
                         quote! {
                             .route(#route, |service: ::std::sync::Arc<Self>, request: #input_type, #parts_param, #state_param| {
                                 async move {
-                                    service.#method_ident(request #(, match <#ext_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await { Ok(r) => r, Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
+                                    service.#method_ident(request #(, match <#extractor_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &state).await { Ok(r) => r, #[allow(unreachable_code)] Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
                                 }
                             })
                         }
@@ -537,10 +476,7 @@ impl ServiceGenerator for TwirpServiceGenerator {
                     .methods
                     .iter()
                     .map(|method| {
-                        let route = format!(
-                            "/{}.{}/{}",
-                            service.package, service.proto_name, method.proto_name
-                        );
+                        let route = route(method);
                         let method_ident = format_ident!("{}", method.name);
                         let input_type: TokenStream = method.input_type.parse().unwrap();
                         let grpc_fn_ident =
@@ -560,8 +496,9 @@ impl ServiceGenerator for TwirpServiceGenerator {
                         } else {
                             quote! { mut parts: ::twurst_server::codegen::RequestParts }
                         };
+                        // The error branch is unreachable for extractors with an infallible rejection like HeaderMap
                         let service_call = quote! {
-                                service.#method_ident(request #(, match <#extractor_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await { Ok(r) => r, Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
+                                service.#method_ident(request #(, match <#extractor_types as ::twurst_server::codegen::FromRequestParts<_>>::from_request_parts(&mut parts, &()).await { Ok(r) => r, #[allow(unreachable_code)] Err(e) => { return Err(::twurst_server::codegen::twirp_error_from_response(e).await) } })*).await
                             };
                         let service_call = if method.server_streaming {
                             quote! { Ok(Box::into_pin(#service_call?)) }
@@ -618,7 +555,13 @@ fn quote_comments(comments: &Comments) -> Vec<TokenStream> {
         .leading
         .iter()
         .map(|c| quote! { #[doc = #c] })
-        .collect::<Vec<_>>()
+        .collect()
+}
+
+fn quote_deprecated(deprecated: Option<bool>) -> Option<TokenStream> {
+    deprecated
+        .unwrap_or(false)
+        .then(|| quote! { #[deprecated] })
 }
 
 #[cfg(test)]
