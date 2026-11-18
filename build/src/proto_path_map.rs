@@ -15,55 +15,23 @@ impl<T> ProtoPathMap<T> {
         self.matchers.push((matcher, value));
     }
 
-    /// Returns a iterator over all the values matching the given path
-    pub(crate) fn service_matches(&self, service: &Service) -> Iter<'_, T> {
-        let fq_path = format!(".{}.{}", service.package, service.proto_name);
-        self.fq_path_matches(&fq_path)
+    /// Returns a iterator over all the values matching the given service
+    pub(crate) fn service_matches(
+        &self,
+        service: &Service,
+    ) -> impl Iterator<Item = &T> + use<'_, T> {
+        self.fq_path_matches(&format!(".{}.{}", service.package, service.proto_name))
     }
 
     /// Returns a iterator over all the values matching the given fully-qualified proto path
-    pub(crate) fn fq_path_matches(&self, fq_path: &str) -> Iter<'_, T> {
-        Iter::new(self, fq_path.to_string())
+    pub(crate) fn fq_path_matches(&self, fq_path: &str) -> impl Iterator<Item = &T> + use<'_, T> {
+        let fq_path = fq_path.to_owned();
+        self.matchers
+            .iter()
+            .filter(move |(matcher, _)| sub_path_iter(&fq_path).any(|p| p == matcher))
+            .map(|(_, value)| value)
     }
 }
-
-/// Iterator inside a ProtoPathMap that only returns values that matches a given path
-pub(crate) struct Iter<'a, T> {
-    iter: std::slice::Iter<'a, (String, T)>,
-    path: String,
-}
-
-impl<'a, T> Iter<'a, T> {
-    fn new(map: &'a ProtoPathMap<T>, path: String) -> Self {
-        Self {
-            iter: map.matchers.iter(),
-            path,
-        }
-    }
-
-    fn is_match(&self, path: &str) -> bool {
-        sub_path_iter(self.path.as_str()).any(|p| p == path)
-    }
-}
-
-impl<'a, T> std::iter::Iterator for Iter<'a, T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.iter.next() {
-                Some((p, v)) => {
-                    if self.is_match(p) {
-                        return Some(v);
-                    }
-                }
-                None => return None,
-            }
-        }
-    }
-}
-
-impl<T> std::iter::FusedIterator for Iter<'_, T> {}
 
 /// Given a fully-qualified path, returns a sequence of paths:
 /// - the path itself
@@ -171,11 +139,10 @@ mod tests {
         path_map.insert(".a.b".to_owned(), 2);
         path_map.insert(".a.b.c.d".to_owned(), 3);
 
-        let mut iter = path_map.fq_path_matches(".a.b.c.d");
-        assert_eq!(Some(&1), iter.next());
-        assert_eq!(Some(&2), iter.next());
-        assert_eq!(Some(&3), iter.next());
-        assert_eq!(None, iter.next());
+        assert_eq!(
+            path_map.fq_path_matches(".a.b.c.d").collect::<Vec<_>>(),
+            [&1, &2, &3]
+        );
 
         path_map.clear();
 
@@ -183,11 +150,10 @@ mod tests {
         path_map.insert(".a.b".to_owned(), 2);
         path_map.insert(".".to_owned(), 3);
 
-        let mut iter = path_map.fq_path_matches(".a.b.c.d");
-        assert_eq!(Some(&1), iter.next());
-        assert_eq!(Some(&2), iter.next());
-        assert_eq!(Some(&3), iter.next());
-        assert_eq!(None, iter.next());
+        assert_eq!(
+            path_map.fq_path_matches(".a.b.c.d").collect::<Vec<_>>(),
+            [&1, &2, &3]
+        );
     }
 
     #[test]
@@ -210,27 +176,24 @@ mod tests {
             },
         };
 
-        let mut iter = path_map.service_matches(&service);
-        assert_eq!(Some(&1), iter.next());
-        assert_eq!(Some(&2), iter.next());
-        assert_eq!(Some(&3), iter.next());
-        assert_eq!(None, iter.next());
+        assert_eq!(
+            path_map.service_matches(&service).collect::<Vec<_>>(),
+            [&1, &2, &3]
+        );
 
         path_map.clear();
 
         // matches just on service name
         path_map.insert("d".to_owned(), 1);
 
-        let mut iter = path_map.service_matches(&service);
-        assert_eq!(Some(&1), iter.next());
+        assert_eq!(path_map.service_matches(&service).collect::<Vec<_>>(), [&1]);
 
         path_map.clear();
 
         // matches just on path (and others do not)
         path_map.insert(".a.b.c.d".to_owned(), 1);
 
-        let mut iter = path_map.service_matches(&service);
-        assert_eq!(Some(&1), iter.next());
+        assert_eq!(path_map.service_matches(&service).collect::<Vec<_>>(), [&1]);
 
         let alternate_service = Service {
             proto_name: "e".to_string(),
@@ -244,7 +207,6 @@ mod tests {
             },
         };
 
-        let mut iter = path_map.service_matches(&alternate_service);
-        assert_eq!(None, iter.next());
+        assert_eq!(path_map.service_matches(&alternate_service).next(), None);
     }
 }

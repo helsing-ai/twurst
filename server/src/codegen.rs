@@ -74,10 +74,8 @@ impl<S: Clone + Send + Sync + 'static, RS: Clone + Send + Sync + 'static> TwirpR
     pub fn route_streaming(mut self, path: &str) -> Self {
         self.router = self.router.route(
             path,
-            post(move || async move {
-                TwirpError::unimplemented("Streaming is not supported by Twirp")
-            })
-            .fallback(method_not_allowed),
+            post(|| async { TwirpError::unimplemented("Streaming is not supported by Twirp") })
+                .fallback(method_not_allowed),
         );
         self
     }
