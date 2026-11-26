@@ -48,4 +48,4 @@ tower = "0.5.3"
 tower-http = ">=0.6.11, <0.8"
 tracing = "0.1.44"
 trait-variant = "0.1.2"
-twurst-error = { path = "error", version = "0.3.0" }
+twurst-error = { path = "error", version = "0.3.1" }

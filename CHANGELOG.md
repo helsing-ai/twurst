@@ -1,3 +1,14 @@
+## [0.3.8] - 2026-11-26 - error, build, client, server
+
+### Added
+- Error: `Display` and `FromStr` implementations for `TwirpErrorCode` (with the new `UnsupportedTwirpErrorCode` parsing error).
+
+### Changed
+- Error: `dataloss` error code is now mapped to HTTP status 500 as required by the Twirp spec (it was 503).
+- Error: `TwirpError` `Display` implementation now uses the Twirp snake case error code names.
+- Client: map transport errors to more precise Twirp error codes (`deadline_exceeded`, `unavailable`, `malformed`...).
+- Server: return a Twirp `bad_route` error when the wrong HTTP method is used.
+
 ## [0.3.7] - 2026-07-20 - build
 
 ### Changed
