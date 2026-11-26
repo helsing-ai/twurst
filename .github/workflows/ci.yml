@@ -10,23 +10,34 @@ on:
   schedule:
     - cron: "12 3 * * *"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - run: rustup component add rustfmt
       - run: cargo fmt --check
 
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-protoc@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
         working-directory: error
       - run: cargo clippy --all-targets -- -D warnings -D clippy::all
@@ -47,11 +58,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-protoc@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
       - run: cargo test
         working-directory: error
       - run: cargo test
@@ -72,12 +85,14 @@ jobs:
   test_msv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-protoc@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - run: rustup override set 1.88.0 && rustup toolchain install nightly
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
       - run: cargo +nightly update -Z direct-minimal-versions
       - run: cargo test
       - run: cargo test --all-features
@@ -85,11 +100,13 @@ jobs:
   rustdoc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-protoc@v3
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-protoc@v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
       - run: cargo doc --all-features --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
@@ -97,7 +114,9 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: taiki-e/install-action@v2.90.6
         with: { tool: cargo-deny }
       - run: cargo deny check
@@ -105,8 +124,10 @@ jobs:
   semver_checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@v2.9.3
       - uses: taiki-e/install-action@v2.90.6
         with: { tool: cargo-semver-checks }
       - run: cargo semver-checks check-release
@@ -114,7 +135,19 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: taiki-e/install-action@v2.90.6
         with: { tool: typos-cli }
       - run: typos
+
+  zizmor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@v0.9.2
+        with:
+          strict-collection: true

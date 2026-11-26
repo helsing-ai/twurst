@@ -5,16 +5,25 @@ on:
     types:
       - published
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish_crates:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment: release
     permissions:
+      contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v7
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: rust-lang/crates-io-auth-action@v1.0.6
         id: auth
       - run: cargo publish
         working-directory: ./error
