@@ -7,7 +7,7 @@ fn main() -> std::io::Result<()> {
         .with_server()
         .with_grpc()
         .with_default_axum_request_extractor("bearer_token", "crate::server::ExtractBearerToken")
-        .compile_protos(&["integration.proto"], &["."])?;
+        .compile_protos(&["integration.proto", "no_package.proto"], &["."])?;
 
     // Custom out dir to not override Twirp
     let tonic_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("tonic");

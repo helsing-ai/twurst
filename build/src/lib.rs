@@ -348,10 +348,14 @@ impl ServiceGenerator for TwirpServiceGenerator {
             .collect::<Vec<TokenStream>>();
 
         let route = |method: &Method| {
-            format!(
-                "/{}.{}/{}",
-                service.package, service.proto_name, method.proto_name
-            )
+            if service.package.is_empty() {
+                format!("/{}/{}", service.proto_name, method.proto_name)
+            } else {
+                format!(
+                    "/{}.{}/{}",
+                    service.package, service.proto_name, method.proto_name
+                )
+            }
         };
 
         let mut output = TokenStream::new();

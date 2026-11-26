@@ -1,9 +1,12 @@
+use axum::http::Request;
+use axum::response::IntoResponse;
 use eyre::Result;
 use std::time::{Duration, SystemTime};
-use tower::ServiceBuilder;
+use tower::{ServiceBuilder, service_fn};
 use tower_http::auth::AddAuthorizationLayer;
-use twurst_client::TwirpHttpClient;
+use twurst_client::{TwirpHttpClient, TwirpRequestBody};
 use twurst_integration::client::{Choice, Data, IntegrationClient};
+use twurst_integration::no_package;
 use twurst_integration::proto::{IntegrationService, IntegrationServiceClient};
 use twurst_integration::server;
 use twurst_integration::server::IntegrationServiceServicer;
@@ -66,6 +69,22 @@ async fn test_wrong_password() -> Result<()> {
     ));
     let error = client.test(&data.clone().try_into()?).await.unwrap_err();
     assert_eq!(error, TwirpError::unauthenticated("Invalid password"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_url_without_package() -> Result<()> {
+    let client = no_package::NoPackageServiceClient::new(TwirpHttpClient::new(service_fn(
+        |request: Request<TwirpRequestBody>| async move {
+            assert_eq!(request.uri().path(), "/NoPackageService/Test");
+            Ok::<_, TwirpError>(TwirpError::unimplemented("").into_response())
+        },
+    )));
+    let error = client
+        .test(&no_package::NoPackageRequest {})
+        .await
+        .unwrap_err();
+    assert_eq!(error, TwirpError::unimplemented(""));
     Ok(())
 }
 
