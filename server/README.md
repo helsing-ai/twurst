@@ -134,7 +134,7 @@ async fn main() {
 ```
 [`Router::merge`](https://docs.rs/axum/latest/axum/struct.Router.html#method.merge) still works if you want to serve multiple services.
 
-Note that no limit is set on requests size, use [`RequestBodyLimit`](https://docs.rs/tower-http/latest/tower_http/limit/struct.RequestBodyLimit.html) layer if you want to set one.
+Note that Twirp request bodies are limited to 2 MiB by default (bigger requests get a `malformed` error), use the [`DefaultBodyLimit`](https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html) layer to change or disable this limit.
 
 ## Cargo features
 - `grpc` that provides gRPC support behind `tonic`

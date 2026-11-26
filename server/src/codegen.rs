@@ -125,8 +125,8 @@ async fn parse_request<I: ReflectMessage + Default>(
 ) -> Result<I, TwirpError> {
     let body = body.collect().await.map_err(|e| {
         TwirpError::wrap(
-            TwirpErrorCode::Internal,
-            "Failed to read the request body",
+            TwirpErrorCode::Malformed,
+            format!("Failed to read the request body: {e}"),
             e,
         )
     })?;
@@ -717,6 +717,34 @@ mod tests {
         assert_eq!(
             response.into_body().collect().await.unwrap().to_bytes(),
             b"{\"code\":\"malformed\",\"msg\":\"Unsupported content type: foo/bar\"}".as_slice()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_body_over_limit() {
+        let router = TwirpRouter::new(())
+            .route(
+                "/package.MyService/MyMethod",
+                |(), request: MyMessage, _, _| async move { Ok(request) },
+            )
+            .build()
+            .layer(axum::extract::DefaultBodyLimit::max(1));
+        let response = router
+            .into_service()
+            .call(
+                Request::builder()
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, APPLICATION_JSON)
+                    .uri("/package.MyService/MyMethod")
+                    .body(Body::from(b"{}".to_vec()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            b"{\"code\":\"malformed\",\"msg\":\"Failed to read the request body: length limit exceeded\"}".as_slice()
         );
     }
 
