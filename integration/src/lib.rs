@@ -2,6 +2,11 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/integration.rs"));
 }
 
+/// Generated from `no_package.proto`, which has no `package` statement.
+pub mod no_package {
+    include!(concat!(env!("OUT_DIR"), "/_.rs"));
+}
+
 /// Generated with a custom `out_dir` and `skip_prost_reflect`, exercising the
 /// code path where callers configure prost-reflect externally.
 pub mod custom_out_dir {
