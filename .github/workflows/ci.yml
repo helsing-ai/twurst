@@ -150,4 +150,5 @@ jobs:
           persist-credentials: false
       - uses: zizmorcore/zizmor-action@v0.9.2
         with:
+          advanced-security: false
           strict-collection: true
